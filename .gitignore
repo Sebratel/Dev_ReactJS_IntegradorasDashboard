@@ -1,0 +1,15 @@
+# dependências e artefatos de build
+node_modules/
+dist/
+server/public/
+
+# segredos — o .env real fica na pasta do projeto (um nível acima deste repo),
+# justamente para não ficar perto do que é versionado. Use .env.example de modelo.
+.env
+.env.*
+!.env.example
+
+# diversos
+*.log
+.DS_Store
+Thumbs.db
