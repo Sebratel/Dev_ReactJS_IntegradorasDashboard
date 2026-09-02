@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import * as native from '../model/native.js';
+import * as matrix from '../model/matrix.js';
 
 export const geral = Router();
 
@@ -51,9 +52,15 @@ function filtrosDaQuery(req) {
   return {
     ...periodo(req),
     granularidade: req.query.granularidade === 'mes' ? 'mes' : 'dia',
+    // Native
     sentido: req.query.sentido,
     fila: req.query.fila,
     desconexao: req.query.desconexao,
+    // Matrix
+    ativoReceptivo: req.query.ativoReceptivo,
+    status: req.query.status,
+    servico: req.query.servico,
+    // comum às duas
     agente: req.query.agente,
   };
 }
@@ -79,4 +86,12 @@ geral.get('/native/detalhado', rota((req) => native.detalhado(filtrosDaQuery(req
 geral.get('/native/faixas', rota((req) => native.faixas(filtrosDaQuery(req))));
 geral.get('/native/filtros', rota((req) => native.filtrosDisponiveis(filtrosDaQuery(req))));
 
-geral.get('/meta', rota(async () => ({ ultimoDado: await native.ultimoDado() })));
+geral.get('/matrix/serie', rota((req) => matrix.serie(filtrosDaQuery(req))));
+geral.get('/matrix/detalhado', rota((req) => matrix.detalhado(filtrosDaQuery(req), Number(req.query.limite) || 500)));
+geral.get('/matrix/faixas', rota((req) => matrix.faixas(filtrosDaQuery(req))));
+geral.get('/matrix/filtros', rota((req) => matrix.filtrosDisponiveis(filtrosDaQuery(req))));
+
+geral.get('/meta', rota(async () => {
+  const [nativeUltimo, matrixUltimo] = await Promise.all([native.ultimoDado(), matrix.ultimoDado()]);
+  return { ultimoDado: nativeUltimo, native: nativeUltimo, matrix: matrixUltimo };
+}));

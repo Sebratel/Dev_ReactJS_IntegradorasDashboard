@@ -1,14 +1,17 @@
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
 import { useHealth, useMeta } from './api';
 import { Capa } from './pages/Capa';
+import { Matrix } from './pages/Matrix';
 import { Native } from './pages/Native';
 import { dataBr, horaBr } from './format';
 
+// Ordem de leitura do relatório de origem (pages.json), não ordem alfabética.
 const PAGINAS = [
   { path: '/', label: 'Capa' },
+  { path: '/matrix', label: 'Matrix' },
   { path: '/native', label: 'Native' },
-  // MATRIX, CSAT NATIVE, CSAT MATRIX, PRODUTIVIDADE e QUARTIS entram aqui conforme
-  // cada tela fica pronta — nada de aba para tela que não existe.
+  // CSAT MATRIX, CSAT NATIVE, PRODUTIVIDADE e QUARTIS entram aqui conforme cada
+  // tela fica pronta — nada de aba para tela que não existe.
 ];
 
 function Topbar() {
@@ -50,6 +53,7 @@ export default function App() {
       <PageNav />
       <Routes>
         <Route path="/" element={<Capa />} />
+        <Route path="/matrix" element={<Matrix />} />
         <Route path="/native" element={<Native />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

@@ -46,3 +46,23 @@ export function useNativeFiltros(periodo) {
     staleTime: 5 * 60000,
   });
 }
+
+export function useMatrixSerie(filtros) {
+  return useQuery({ queryKey: ['matrix', 'serie', filtros], queryFn: () => apiGet('/matrix/serie', filtros) });
+}
+
+export function useMatrixDetalhado(filtros) {
+  return useQuery({ queryKey: ['matrix', 'detalhado', filtros], queryFn: () => apiGet('/matrix/detalhado', filtros) });
+}
+
+export function useMatrixFaixas(filtros) {
+  return useQuery({ queryKey: ['matrix', 'faixas', filtros], queryFn: () => apiGet('/matrix/faixas', filtros) });
+}
+
+export function useMatrixFiltros(periodo) {
+  return useQuery({
+    queryKey: ['matrix', 'filtros', periodo],
+    queryFn: () => apiGet('/matrix/filtros', periodo),
+    staleTime: 5 * 60000,
+  });
+}
