@@ -112,6 +112,14 @@ export function useSupMassivas(filtros) {
   return useQuery({ queryKey: ['sup', 'massivas', filtros], queryFn: () => apiGet('/sup/massivas', filtros) });
 }
 
+export function useSupResumo(qual, filtros) {
+  return useQuery({ queryKey: ['sup', qual, 'resumo', filtros], queryFn: () => apiGet(`/sup/${qual}/resumo`, filtros) });
+}
+
+export function useSupDetalhamento(qual, filtros) {
+  return useQuery({ queryKey: ['sup', qual, 'detalhamento', filtros], queryFn: () => apiGet(`/sup/${qual}/detalhamento`, filtros) });
+}
+
 export function useSupFiltros(periodo) {
   return useQuery({
     queryKey: ['sup', 'filtros', periodo],

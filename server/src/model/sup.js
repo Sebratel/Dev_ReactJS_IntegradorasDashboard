@@ -335,20 +335,183 @@ export async function entrantes(filtros) {
     }));
 }
 
+// ------------------------------------------------- telas MATRIX e NATIVE do SUP
+
+/**
+ * As duas telas mostram a mesma coisa em três recortes: por data, por agente e o
+ * detalhamento. Os KPIs do topo são o total do período.
+ *
+ * TMA/TME seguem a mesma decisão do resto do dashboard: MEDIANA no Matrix (onde
+ * `data_finalizacao` é quando alguém fecha a conversa, com cauda de dias) e média
+ * no Native (onde são durações de ligação). O TME do Matrix aqui é o tempo até a
+ * 1ª mensagem do agente, que é o que a tela do SUP mede.
+ */
+function condicoesMatrix(filtros) {
+  const where = ["m.data_atendimento >= ?", "m.data_atendimento < ?", "m.data_atendimento <> ''"];
+  const params = [filtros.de, filtros.ate];
+  filtroIn('m.servico', filtros.servico, where, params);
+  filtroIn(`CASE m.ativo_receptivo WHEN '1' THEN 'Receptivo' WHEN '0' THEN 'Ativo' ELSE m.ativo_receptivo END`,
+    filtros.ativoReceptivo, where, params);
+  filtroIn(`CASE m.status WHEN 3 THEN 'Finalizado' WHEN 6 THEN 'Transferido' ELSE CAST(m.status AS CHAR) END`,
+    filtros.status, where, params);
+  return { onde: where.join(' AND '), params };
+}
+
+function condicoesNative(filtros) {
+  const where = ['n.data_hora >= ?', 'n.data_hora < ?'];
+  const params = [filtros.de, filtros.ate];
+  filtroIn('n.fila', filtros.fila, where, params);
+  filtroIn('n.sentido', filtros.sentido, where, params);
+  return { onde: where.join(' AND '), params };
+}
+
+const numero = (v) => (v === null || v === undefined ? null : Math.round(Number(v)));
+
+export async function resumoMatrix(filtros) {
+  const { onde, params } = condicoesMatrix(filtros);
+  // janela inline em cada percentile_cont: o MariaDB não aceita janela nomeada
+  // (`over j`) nessa função — erro de sintaxe. Já me pegou uma vez no matrix.js.
+  const mediana = (expr, particao) =>
+    `percentile_cont(0.5) within group (order by ${expr}) over (partition by ${particao})`;
+
+  const [porData, porAgente, porCanal, total] = await Promise.all([
+    maria(
+      `select distinct date(m.data_atendimento) as chave,
+              count(m.protocolo) over (partition by date(m.data_atendimento)) as qtd,
+              ${mediana(TMA_MATRIX_SEG, 'date(m.data_atendimento)')} as tma,
+              ${mediana(TME_MATRIX_SEG, 'date(m.data_atendimento)')} as tme
+         from ${A}.db_matrix m where ${onde} order by chave`, params),
+    maria(
+      `select distinct m.atendente as chave,
+              count(m.protocolo) over (partition by m.atendente) as qtd,
+              ${mediana(TMA_MATRIX_SEG, 'm.atendente')} as tma, ${mediana(TME_MATRIX_SEG, 'm.atendente')} as tme
+         from ${A}.db_matrix m where ${onde} and m.atendente <> '' and m.atendente <> 'null'`, params),
+    maria(
+      `select distinct m.canal as chave,
+              count(m.protocolo) over (partition by m.canal) as qtd,
+              ${mediana(TMA_MATRIX_SEG, 'm.canal')} as tma, ${mediana(TME_MATRIX_SEG, 'm.canal')} as tme
+         from ${A}.db_matrix m where ${onde} and m.canal <> ''`, params),
+    maria(
+      `select distinct count(m.protocolo) over () qtd,
+              ${mediana(TMA_MATRIX_SEG, "'x'")} as tma, ${mediana(TME_MATRIX_SEG, "'x'")} as tme
+         from ${A}.db_matrix m where ${onde} limit 1`, params),
+  ]);
+
+  // só a chave de DATA é fatiada em 10 (vem 'YYYY-MM-DD HH:MM:SS' do driver);
+  // nome de agente e canal passam inteiros — cortá-los virava "Ana Pires "
+  const arruma = (linhas, ehData = false) => linhas.rows
+    .map((r) => ({
+      chave: ehData ? String(r.chave).slice(0, 10) : String(r.chave),
+      qtd: Number(r.qtd) || 0,
+      tmaSeg: numero(r.tma),
+      tmeSeg: numero(r.tme),
+    }))
+    .sort((a, b) => b.qtd - a.qtd);
+
+  return {
+    porData: arruma(porData, true).sort((a, b) => a.chave.localeCompare(b.chave)),
+    porAgente: arruma(porAgente),
+    porCanal: arruma(porCanal),
+    total: {
+      qtd: Number(total.rows[0]?.qtd) || 0,
+      tmaSeg: numero(total.rows[0]?.tma),
+      tmeSeg: numero(total.rows[0]?.tme),
+    },
+  };
+}
+
+export async function detalhamentoMatrix(filtros, limite = 500) {
+  const { onde, params } = condicoesMatrix(filtros);
+  const { rows } = await maria(
+    `select m.atendente, m.protocolo, m.canal, m.servico,
+            m.data_entrada, m.data_atendimento, m.data_primeira_mensagem_agente, m.data_finalizacao,
+            CASE m.ativo_receptivo WHEN '1' THEN 'Receptivo' WHEN '0' THEN 'Ativo' ELSE m.ativo_receptivo END as ativo_receptivo,
+            CASE m.status WHEN 3 THEN 'Finalizado' WHEN 6 THEN 'Transferido' ELSE CAST(m.status AS CHAR) END as status,
+            ${TMA_MATRIX_SEG} as tma_seg, ${TME_MATRIX_SEG} as tme_seg
+       from ${A}.db_matrix m where ${onde}
+      order by m.data_atendimento desc limit ?`,
+    [...params, limite],
+  );
+  return rows;
+}
+
+export async function resumoNative(filtros) {
+  const { onde, params } = condicoesNative(filtros);
+  const atendida = 'coalesce(n.perdida, 0) = 0';
+
+  const [porData, porAgente, total] = await Promise.all([
+    maria(
+      `select date(n.data_hora) chave,
+              count(case when ${atendida} then n.protocolo end) qtd,
+              avg(case when ${atendida} then TIME_TO_SEC(n.atendimento) end) tma,
+              avg(case when ${atendida} then TIME_TO_SEC(n.espera) end) tme
+         from ${A}.db_native n where ${onde} group by chave order by chave`, params),
+    maria(
+      `select n.agente chave,
+              count(case when ${atendida} then n.protocolo end) qtd,
+              avg(case when ${atendida} then TIME_TO_SEC(n.atendimento) end) tma,
+              avg(case when ${atendida} then TIME_TO_SEC(n.espera) end) tme
+         from ${A}.db_native n where ${onde} and n.agente <> '' and n.agente <> 'null'
+        group by chave`, params),
+    maria(
+      `select count(case when ${atendida} then n.protocolo end) qtd,
+              avg(case when ${atendida} then TIME_TO_SEC(n.atendimento) end) tma,
+              avg(case when ${atendida} then TIME_TO_SEC(n.espera) end) tme
+         from ${A}.db_native n where ${onde}`, params),
+  ]);
+
+  // só a chave de DATA é fatiada em 10 (vem 'YYYY-MM-DD HH:MM:SS' do driver);
+  // nome de agente e canal passam inteiros — cortá-los virava "Ana Pires "
+  const arruma = (linhas, ehData = false) => linhas.rows
+    .map((r) => ({
+      chave: ehData ? String(r.chave).slice(0, 10) : String(r.chave),
+      qtd: Number(r.qtd) || 0,
+      tmaSeg: numero(r.tma),
+      tmeSeg: numero(r.tme),
+    }))
+    .sort((a, b) => b.qtd - a.qtd);
+
+  return {
+    porData: arruma(porData, true).sort((a, b) => a.chave.localeCompare(b.chave)),
+    porAgente: arruma(porAgente),
+    porCanal: [],
+    total: {
+      qtd: Number(total.rows[0]?.qtd) || 0,
+      tmaSeg: numero(total.rows[0]?.tma),
+      tmeSeg: numero(total.rows[0]?.tme),
+    },
+  };
+}
+
+export async function detalhamentoNative(filtros, limite = 500) {
+  const { onde, params } = condicoesNative(filtros);
+  const { rows } = await maria(
+    `select n.agente, n.protocolo, n.data_hora, n.fila, n.sentido, n.desconexao, n.nome_cliente,
+            TIME_TO_SEC(n.atendimento) as tma_seg, TIME_TO_SEC(n.espera) as tme_seg
+       from ${A}.db_native n where ${onde}
+      order by n.data_hora desc limit ?`,
+    [...params, limite],
+  );
+  return rows;
+}
+
 /** Opções dos slicers do relatório SUP. */
 export async function filtrosDisponiveis(filtros) {
   const p = [filtros.de, filtros.ate];
-  const [servico, ativoReceptivo, fila, sentido] = await Promise.all([
+  const [servico, ativoReceptivo, fila, sentido, status] = await Promise.all([
     maria(`select distinct servico v from ${A}.db_matrix where data_atendimento >= ? and data_atendimento < ? and servico <> '' order by v`, p),
     maria(`select distinct CASE ativo_receptivo WHEN '1' THEN 'Receptivo' WHEN '0' THEN 'Ativo' ELSE ativo_receptivo END v
              from ${A}.db_matrix where data_atendimento >= ? and data_atendimento < ? and ativo_receptivo is not null order by v`, p),
     maria(`select distinct fila v from ${A}.db_native where data_hora >= ? and data_hora < ? and fila <> '' order by v`, p),
     maria(`select distinct sentido v from ${A}.db_native where data_hora >= ? and data_hora < ? and sentido <> '' order by v`, p),
+    maria(`select distinct CASE status WHEN 3 THEN 'Finalizado' WHEN 6 THEN 'Transferido' ELSE CAST(status AS CHAR) END v
+             from ${A}.db_matrix where data_atendimento >= ? and data_atendimento < ? and status is not null order by v`, p),
   ]);
   return {
     servico: servico.rows.map((r) => r.v),
     ativoReceptivo: ativoReceptivo.rows.map((r) => r.v).filter(Boolean),
     fila: fila.rows.map((r) => r.v),
     sentido: sentido.rows.map((r) => r.v),
+    status: status.rows.map((r) => r.v).filter(Boolean),
   };
 }

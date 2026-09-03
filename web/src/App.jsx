@@ -8,6 +8,7 @@ import { Produtividade } from './pages/Produtividade';
 import { Quartis } from './pages/Quartis';
 import { CapaSup } from './pages/CapaSup';
 import { SupExecutivo } from './pages/SupExecutivo';
+import { SupMatrix, SupNative } from './pages/SupPlataforma';
 import { dataBr, horaBr } from './format';
 
 /**
@@ -42,8 +43,9 @@ const RELATORIOS = [
     titulo: 'SUP - Indicadores Suporte',
     paginas: [
       { path: '/sup', label: 'Capa', fim: true },
+      { path: '/sup/matrix', label: 'Matrix' },
+      { path: '/sup/native', label: 'Native' },
       { path: '/sup/executivo', label: 'Report Executivo' },
-      // MATRIX e NATIVE do SUP entram aqui conforme ficam prontos
     ],
   },
 ];
@@ -122,6 +124,8 @@ export default function App() {
         <Route path="/geral/produtividade" element={<Produtividade />} />
         <Route path="/geral/quartis" element={<Quartis />} />
         <Route path="/sup" element={<CapaSup />} />
+        <Route path="/sup/matrix" element={<SupMatrix />} />
+        <Route path="/sup/native" element={<SupNative />} />
         <Route path="/sup/executivo" element={<SupExecutivo />} />
         <Route path="*" element={<Navigate to="/geral" replace />} />
       </Routes>

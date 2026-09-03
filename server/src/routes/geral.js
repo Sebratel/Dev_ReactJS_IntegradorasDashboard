@@ -48,7 +48,12 @@ function periodo(req) {
   if (de > ate) throw new ErroDePedido('A data inicial do período é posterior à data final.');
   // `ate` é exclusivo no SQL: soma um dia para o filtro incluir o dia escolhido inteiro
   const ateExclusivo = new Date(ate.getTime() + 864e5);
-  const iso = (d) => d.toISOString().slice(0, 19).replace('T', ' ');
+  // Formata em hora LOCAL. Com `toISOString()` o limite virava UTC (+3h aqui) e a
+  // janela inteira saía deslocada: pedindo um dia vinham as 3 primeiras horas do
+  // dia seguinte junto. As bases guardam hora local.
+  const dois = (n) => String(n).padStart(2, '0');
+  const iso = (d) => `${d.getFullYear()}-${dois(d.getMonth() + 1)}-${dois(d.getDate())}`
+    + ` ${dois(d.getHours())}:${dois(d.getMinutes())}:${dois(d.getSeconds())}`;
   return { de: iso(de), ate: iso(ateExclusivo) };
 }
 
@@ -118,6 +123,10 @@ geral.get('/quartis', rota((req) => quartis.tabela(filtrosDaQuery(req))));
 geral.get('/sup/acompanhamento', rota((req) => sup.acompanhamento(filtrosDaQuery(req))));
 geral.get('/sup/entrantes', rota((req) => sup.entrantes(filtrosDaQuery(req))));
 geral.get('/sup/massivas', rota((req) => sup.massivas(filtrosDaQuery(req))));
+geral.get('/sup/matrix/resumo', rota((req) => sup.resumoMatrix(filtrosDaQuery(req))));
+geral.get('/sup/matrix/detalhamento', rota((req) => sup.detalhamentoMatrix(filtrosDaQuery(req), Number(req.query.limite) || 500)));
+geral.get('/sup/native/resumo', rota((req) => sup.resumoNative(filtrosDaQuery(req))));
+geral.get('/sup/native/detalhamento', rota((req) => sup.detalhamentoNative(filtrosDaQuery(req), Number(req.query.limite) || 500)));
 geral.get('/sup/filtros', rota((req) => sup.filtrosDisponiveis(filtrosDaQuery(req))));
 
 geral.get('/meta', rota(async () => {

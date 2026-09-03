@@ -48,7 +48,7 @@
   /* 36px = padding da .page (10 em cima + 14 embaixo) + o gap entre as duas faixas
      + as bordas de 1px da topbar e da navegação. Medido: com 34 sobrava 1px de
      rolagem em 1440x900, o bastante para nascer uma barra de rolagem. */
-  --chrome: calc(var(--h-topbar) + var(--h-nav) + var(--h-filtros) + var(--h-chips) + var(--h-aviso) + var(--h-subnav) + 36px);
+  --chrome: calc(var(--h-topbar) + var(--h-nav) + var(--h-filtros) + var(--h-chips) + var(--h-aviso) + var(--h-subnav) + var(--h-kpis) + 36px);
   --util: calc(100vh - var(--chrome));
 }
 
@@ -495,6 +495,29 @@ body {
 }
 .kpi .desc { font-size: 9.5px; color: rgba(255, 255, 255, 0.6); line-height: 1.3; }
 
+/* Faixa fina de indicadores: o mesmo cartão de KPI em variante clara. O par de
+   cores muda POR INTEIRO (fundo, valor, rótulo e descrição) — trocar só o fundo
+   deixaria branco sobre branco, que é o bug que o padrão descreve. */
+.kpi-faixa {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: var(--gap);
+  flex: 0 0 auto;
+}
+.kpi-faixa .kpi {
+  background: var(--pbi-superficie);
+  border: 1px solid var(--pbi-borda);
+  box-shadow: var(--card-shadow);
+  color: var(--pbi-ink);
+  text-align: left;
+  padding: 8px 14px;
+  gap: 1px;
+  min-height: 0;
+}
+.kpi-faixa .kpi .value { color: var(--pbi-primary); font-size: clamp(18px, 2.4vh, 26px); }
+.kpi-faixa .kpi .label { color: var(--pbi-muted); }
+.kpi-faixa .kpi .desc {
+  color: var(--pbi-muted); font-size: 10.5px; line-height: 1.35; margin-top: 1px; font-weight: 400;
+}
+
 /* -------------------------------------------------------------- tabelas */
 .tbl-wrap { overflow: auto; height: 100%; flex: 1; min-height: 0; }
 
@@ -738,3 +761,13 @@ table.pbi th .ord { vertical-align: -1px; margin-left: 3px; color: var(--pbi-pri
   display: flex; align-items: center; height: var(--h-nav);
   padding: 0 13px; font-size: 11.5px; color: var(--pbi-muted);
 }
+
+/* Três painéis de resumo lado a lado (telas MATRIX e NATIVE do SUP). */
+.linha-tres  { grid-template-columns: minmax(240px, 26fr) minmax(300px, 42fr) minmax(220px, 32fr); }
+.linha-dupla { grid-template-columns: minmax(260px, 38fr) minmax(320px, 62fr); }
+@media (max-width: 1100px) {
+  .linha-tres, .linha-dupla { grid-template-columns: 1fr; }
+}
+
+/* A faixa de indicadores também sai da área útil (altura medida pelo componente). */
+:root { --h-kpis: 0px; }
