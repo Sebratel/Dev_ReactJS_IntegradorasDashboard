@@ -720,3 +720,20 @@ table.matrix td.rowhead.clicavel:hover { background: #FCF3F4; }
 .btn-exportar:hover { background: #fff; color: var(--pbi-primary); border-color: #fff; }
 
 table.pbi th .ord { vertical-align: -1px; margin-left: 3px; color: var(--pbi-primary); }
+
+/* Alternador de relatório na barra do topo. Reusa o visual do controle segmentado,
+   mas com links (a URL diz qual relatório está aberto). */
+.seg-relatorio { border-color: var(--pbi-grid); flex: none; }
+.seg-relatorio a {
+  display: inline-flex; align-items: center;
+  padding: 3px 13px; height: 24px;
+  font-size: 11.5px; font-weight: 700; letter-spacing: 0.4px;
+  color: var(--pbi-muted); text-decoration: none; text-transform: uppercase;
+}
+.seg-relatorio a:hover { background: #FAF9F8; color: var(--pbi-ink); }
+.seg-relatorio a.on { background: var(--pbi-primary); color: #fff; }
+
+.pagenav-vazio {
+  display: flex; align-items: center; height: var(--h-nav);
+  padding: 0 13px; font-size: 11.5px; color: var(--pbi-muted);
+}
