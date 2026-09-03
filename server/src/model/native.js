@@ -80,10 +80,15 @@ export async function serie(filtros) {
   // como a maioria das esperas é menor que 60s a média por ela dá quase zero — foi
   // o que levou a série "Média de TME" do relatório original a usar SOMA no lugar
   // de média para a linha aparecer.
+  // `perdida` é NULL (atendida) ou 1 (perdida) — nunca 0. Na origem "atendidas" é
+  // `CountNonNull(protocolo)`, ou seja o TOTAL, com as perdidas dentro: as duas
+  // colunas do gráfico não somavam o total, uma continha a outra. Aqui "atendidas"
+  // são as não-perdidas, que é o que o próprio modelo chama de
+  // `#native_completed_services` na tela de CSAT.
   const { rows } = await query(
     `select ${chave} as periodo,
-            count(protocolo)                                  as atendidas,
-            count(case when perdida = 1 then protocolo end)   as perdidas,
+            count(case when coalesce(perdida, 0) = 0 then protocolo end) as atendidas,
+            count(case when perdida = 1 then protocolo end)              as perdidas,
             avg(TIME_TO_SEC(atendimento))                     as tma_seg,
             avg(TIME_TO_SEC(espera))                          as tme_seg
        from ${TABELA}

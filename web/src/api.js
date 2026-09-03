@@ -66,3 +66,29 @@ export function useMatrixFiltros(periodo) {
     staleTime: 5 * 60000,
   });
 }
+
+/** `qual` = 'csat-matrix' ou 'csat-native' — as duas telas têm a mesma forma. */
+export function useCsatSerie(qual, filtros) {
+  return useQuery({ queryKey: [qual, 'serie', filtros], queryFn: () => apiGet(`/${qual}/serie`, filtros) });
+}
+
+export function useCsatDetalhado(qual, filtros) {
+  return useQuery({ queryKey: [qual, 'detalhado', filtros], queryFn: () => apiGet(`/${qual}/detalhado`, filtros) });
+}
+
+export function useCsatFiltros(qual, periodo) {
+  return useQuery({
+    queryKey: [qual, 'filtros', periodo],
+    queryFn: () => apiGet(`/${qual}/filtros`, periodo),
+    staleTime: 5 * 60000,
+  });
+}
+
+/** Janela em que a base de avaliações tem dado — a do Native parou em dez/2025. */
+export function useCsatCobertura(qual) {
+  return useQuery({
+    queryKey: [qual, 'cobertura'],
+    queryFn: () => apiGet(`/${qual}/cobertura`),
+    staleTime: 10 * 60000,
+  });
+}

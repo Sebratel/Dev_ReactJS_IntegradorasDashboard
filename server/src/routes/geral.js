@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import * as native from '../model/native.js';
 import * as matrix from '../model/matrix.js';
+import * as csat from '../model/csat.js';
 
 export const geral = Router();
 
@@ -60,6 +61,9 @@ function filtrosDaQuery(req) {
     ativoReceptivo: req.query.ativoReceptivo,
     status: req.query.status,
     servico: req.query.servico,
+    // CSAT
+    pergunta: req.query.pergunta,
+    resposta: req.query.resposta,
     // comum às duas
     agente: req.query.agente,
   };
@@ -90,6 +94,16 @@ geral.get('/matrix/serie', rota((req) => matrix.serie(filtrosDaQuery(req))));
 geral.get('/matrix/detalhado', rota((req) => matrix.detalhado(filtrosDaQuery(req), Number(req.query.limite) || 500)));
 geral.get('/matrix/faixas', rota((req) => matrix.faixas(filtrosDaQuery(req))));
 geral.get('/matrix/filtros', rota((req) => matrix.filtrosDisponiveis(filtrosDaQuery(req))));
+
+geral.get('/csat-matrix/serie', rota((req) => csat.serieMatrix(filtrosDaQuery(req))));
+geral.get('/csat-matrix/detalhado', rota((req) => csat.detalhadoMatrix(filtrosDaQuery(req), Number(req.query.limite) || 500)));
+geral.get('/csat-matrix/filtros', rota((req) => csat.filtrosMatrix(filtrosDaQuery(req))));
+geral.get('/csat-matrix/cobertura', rota(() => csat.cobertura('matrix')));
+
+geral.get('/csat-native/serie', rota((req) => csat.serieNative(filtrosDaQuery(req))));
+geral.get('/csat-native/detalhado', rota((req) => csat.detalhadoNative(filtrosDaQuery(req), Number(req.query.limite) || 500)));
+geral.get('/csat-native/filtros', rota((req) => csat.filtrosNative(filtrosDaQuery(req))));
+geral.get('/csat-native/cobertura', rota(() => csat.cobertura('native')));
 
 geral.get('/meta', rota(async () => {
   const [nativeUltimo, matrixUltimo] = await Promise.all([native.ultimoDado(), matrix.ultimoDado()]);

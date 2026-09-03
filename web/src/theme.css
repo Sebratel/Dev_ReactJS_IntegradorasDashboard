@@ -40,10 +40,14 @@
   --h-filtros: 50px;
   --gap: 10px;
   --h-chips: 0px;
+  /* O aviso de recorte só existe em algumas telas (base parada, dado filtrado por
+     permissão). Entra na conta do cromo por variável própria pelo mesmo motivo dos
+     chips: somá-lo a --h-filtros obrigaria a repetir a conta nas media queries. */
+  --h-aviso: 0px;
   /* 36px = padding da .page (10 em cima + 14 embaixo) + o gap entre as duas faixas
      + as bordas de 1px da topbar e da navegação. Medido: com 34 sobrava 1px de
      rolagem em 1440x900, o bastante para nascer uma barra de rolagem. */
-  --chrome: calc(var(--h-topbar) + var(--h-nav) + var(--h-filtros) + var(--h-chips) + 36px);
+  --chrome: calc(var(--h-topbar) + var(--h-nav) + var(--h-filtros) + var(--h-chips) + var(--h-aviso) + 36px);
   --util: calc(100vh - var(--chrome));
 }
 
@@ -358,7 +362,9 @@ body {
 }
 .dialogo > footer button.principal:hover { background: var(--pbi-primary-dark); color: #fff; }
 
-/* Aviso de recorte acima do conteúdo. */
+/* Aviso de recorte acima do conteúdo. A altura real vai para `--h-aviso` pelo
+   próprio componente (ele se mede): o texto quebra em mais linhas em tela estreita
+   e um valor fixo aqui não fecharia a conta em todas as resoluções. */
 .aviso-recorte {
   display: flex; align-items: center; gap: 7px; margin: 0 0 var(--gap);
   padding: 7px 11px; border-radius: 7px;

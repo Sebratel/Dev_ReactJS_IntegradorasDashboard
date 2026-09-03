@@ -16,8 +16,9 @@ import { dataBr, horaBr, hmsSeg, int, pct } from '../format';
  *  - a formatação condicional de linha da tabela detalhada aponta para a tabela
  *    `payments_contracts`, que não existe neste modelo (herdada de outro relatório):
  *    é configuração morta e não foi replicada;
- *  - "atendidas" mantém a definição da origem (contagem de chamadas com protocolo),
- *    que inclui as perdidas — por isso as duas colunas aparecem lado a lado.
+ *  - "atendidas" na origem é a contagem de TODAS as chamadas, com as perdidas
+ *    dentro — as duas colunas do gráfico não somavam o total, uma continha a outra.
+ *    Aqui são as não-perdidas, mesma definição de `#native_completed_services`.
  */
 export function Native() {
   const padrao = periodoPadrao();
