@@ -1,9 +1,10 @@
-import { useLayoutEffect, useRef } from 'react';
+import { useRef } from 'react';
 import { useCsatCobertura, useCsatDetalhado, useCsatFiltros, useCsatSerie } from '../api';
 import { CORES, ComboChart } from '../components/charts';
 import { Filtro, FiltroPeriodo, periodoPadrao, useFiltros } from '../components/SlicerBar';
 import { Tabela } from '../components/tables';
 import { Icone } from '../components/Icone';
+import { useAlturaNoCromo } from '../components/cromo';
 import { Erro, Legenda, Loading, Segmentado, Vazio, Visual } from '../components/ui';
 import { dataBr, horaBr, int, pct } from '../format';
 
@@ -54,30 +55,7 @@ function TabelaRespostas({ consulta }) {
 function AvisoCobertura({ cobertura, de, ate }) {
   const ref = useRef(null);
   const mostrar = Boolean(cobertura?.ate) && cobertura.ate.slice(0, 10) < de;
-
-  useLayoutEffect(() => {
-    const raiz = document.documentElement;
-    if (!mostrar) {
-      raiz.style.removeProperty('--h-aviso');
-      return undefined;
-    }
-    const medir = () => {
-      const el = ref.current;
-      if (!el) return;
-      const meu = getComputedStyle(el);
-      // a .page é flex-column com gap: o aviso come a própria altura, a margem E o
-      // gap que o separa do visual seguinte — faltava o gap, e sobravam 9px
-      const gap = parseFloat(getComputedStyle(el.parentElement).rowGap) || 0;
-      const margem = parseFloat(meu.marginBottom) || 0;
-      raiz.style.setProperty('--h-aviso', `${Math.ceil(el.getBoundingClientRect().height + margem + gap)}px`);
-    };
-    medir();
-    window.addEventListener('resize', medir);
-    return () => {
-      window.removeEventListener('resize', medir);
-      raiz.style.removeProperty('--h-aviso');
-    };
-  }, [mostrar, cobertura?.ate]);
+  useAlturaNoCromo(ref, '--h-aviso', mostrar);
 
   if (!mostrar) return null;
   return (

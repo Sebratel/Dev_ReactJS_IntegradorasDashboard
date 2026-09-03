@@ -4,6 +4,7 @@ import * as matrix from '../model/matrix.js';
 import * as csat from '../model/csat.js';
 import * as produtividade from '../model/produtividade.js';
 import * as quartis from '../model/quartis.js';
+import * as sup from '../model/sup.js';
 
 export const geral = Router();
 
@@ -113,6 +114,11 @@ geral.get('/produtividade/elleven', rota((req) => produtividade.elleven(filtrosD
 geral.get('/produtividade/filtros', rota((req) => produtividade.filtrosDisponiveis(filtrosDaQuery(req))));
 
 geral.get('/quartis', rota((req) => quartis.tabela(filtrosDaQuery(req))));
+
+geral.get('/sup/acompanhamento', rota((req) => sup.acompanhamento(filtrosDaQuery(req))));
+geral.get('/sup/entrantes', rota((req) => sup.entrantes(filtrosDaQuery(req))));
+geral.get('/sup/massivas', rota((req) => sup.massivas(filtrosDaQuery(req))));
+geral.get('/sup/filtros', rota((req) => sup.filtrosDisponiveis(filtrosDaQuery(req))));
 
 geral.get('/meta', rota(async () => {
   const [nativeUltimo, matrixUltimo] = await Promise.all([native.ultimoDado(), matrix.ultimoDado()]);

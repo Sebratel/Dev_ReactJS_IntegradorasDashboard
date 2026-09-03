@@ -320,8 +320,9 @@ body {
 .subnav button.on { background: var(--pbi-primary); border-color: var(--pbi-primary); color: #fff; }
 .subnav .dica { margin-left: auto; font-size: 11.5px; color: var(--pbi-muted); }
 
-/* A faixa da sub-navegação também sai da área útil. */
-:root:has(.subnav) { --h-subnav: 40px; }
+/* A faixa da sub-navegação também sai da área útil — a altura real vem do próprio
+   componente (useAlturaNoCromo), porque a dica ao lado dos botões quebra em mais
+   linhas em tela estreita. */
 
 /* Diálogo centralizado (portal no body) — usado quando a lista do filtro passa de
    ~12 itens. Popover ancorado seria cortado e obrigaria a rolar duas vezes para

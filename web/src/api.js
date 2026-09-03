@@ -100,6 +100,26 @@ export function useProdutividadeFiltros(periodo) {
   });
 }
 
+export function useSupAcompanhamento(filtros) {
+  return useQuery({ queryKey: ['sup', 'acompanhamento', filtros], queryFn: () => apiGet('/sup/acompanhamento', filtros) });
+}
+
+export function useSupEntrantes(filtros) {
+  return useQuery({ queryKey: ['sup', 'entrantes', filtros], queryFn: () => apiGet('/sup/entrantes', filtros) });
+}
+
+export function useSupMassivas(filtros) {
+  return useQuery({ queryKey: ['sup', 'massivas', filtros], queryFn: () => apiGet('/sup/massivas', filtros) });
+}
+
+export function useSupFiltros(periodo) {
+  return useQuery({
+    queryKey: ['sup', 'filtros', periodo],
+    queryFn: () => apiGet('/sup/filtros', periodo),
+    staleTime: 5 * 60000,
+  });
+}
+
 export function useQuartis(filtros) {
   return useQuery({ queryKey: ['quartis', filtros], queryFn: () => apiGet('/quartis', filtros) });
 }

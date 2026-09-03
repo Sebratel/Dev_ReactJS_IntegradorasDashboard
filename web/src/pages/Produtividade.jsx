@@ -1,7 +1,8 @@
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { useProdutividade, useProdutividadeFiltros } from '../api';
 import { CORES, escalaGradiente } from '../components/charts';
 import { Filtro, FiltroPeriodo, periodoPadrao, useFiltros } from '../components/SlicerBar';
+import { useAlturaNoCromo } from '../components/cromo';
 import { Tabela } from '../components/tables';
 import { Erro, Loading, Vazio, Visual } from '../components/ui';
 import { hmsSeg, int, pct } from '../format';
@@ -97,6 +98,8 @@ export function Produtividade() {
       : [];
 
   const atual = VISOES.find((v) => v.id === visao);
+  const refSubnav = useRef(null);
+  useAlturaNoCromo(refSubnav, '--h-subnav');
 
   return (
     <div className="page">
@@ -115,7 +118,7 @@ export function Produtividade() {
         {temFiltro && <button type="button" className="limpar" onClick={limpar}>Limpar filtros</button>}
       </div>
 
-      <div className="subnav">
+      <div className="subnav" ref={refSubnav}>
         {VISOES.map((v) => (
           <button key={v.id} type="button" className={visao === v.id ? 'on' : ''} onClick={() => definir('visao', v.id)}>
             {v.label}
