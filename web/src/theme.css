@@ -44,10 +44,11 @@
      permissão). Entra na conta do cromo por variável própria pelo mesmo motivo dos
      chips: somá-lo a --h-filtros obrigaria a repetir a conta nas media queries. */
   --h-aviso: 0px;
+  --h-subnav: 0px;
   /* 36px = padding da .page (10 em cima + 14 embaixo) + o gap entre as duas faixas
      + as bordas de 1px da topbar e da navegação. Medido: com 34 sobrava 1px de
      rolagem em 1440x900, o bastante para nascer uma barra de rolagem. */
-  --chrome: calc(var(--h-topbar) + var(--h-nav) + var(--h-filtros) + var(--h-chips) + var(--h-aviso) + 36px);
+  --chrome: calc(var(--h-topbar) + var(--h-nav) + var(--h-filtros) + var(--h-chips) + var(--h-aviso) + var(--h-subnav) + 36px);
   --util: calc(100vh - var(--chrome));
 }
 
@@ -304,6 +305,23 @@ body {
 }
 .pop-periodo .presets button:hover { border-color: var(--pbi-primary); color: var(--pbi-primary); }
 .pop-periodo .presets button.on { background: var(--pbi-primary); border-color: var(--pbi-primary); color: #fff; }
+
+/* Sub-navegação DENTRO da página: uma tela que replica três tabelas de origens
+   diferentes mostra uma por vez, em altura cheia. Fica abaixo da barra de filtros
+   porque os filtros valem para as três. */
+.subnav { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.subnav button {
+  border: 1px solid var(--pbi-borda); border-radius: 999px; cursor: pointer;
+  background: #fff; color: var(--pbi-muted);
+  font-family: var(--font); font-size: 12.5px; font-weight: 600;
+  padding: 5px 14px;
+}
+.subnav button:hover { border-color: var(--pbi-primary); color: var(--pbi-primary); }
+.subnav button.on { background: var(--pbi-primary); border-color: var(--pbi-primary); color: #fff; }
+.subnav .dica { margin-left: auto; font-size: 11.5px; color: var(--pbi-muted); }
+
+/* A faixa da sub-navegação também sai da área útil. */
+:root:has(.subnav) { --h-subnav: 40px; }
 
 /* Diálogo centralizado (portal no body) — usado quando a lista do filtro passa de
    ~12 itens. Popover ancorado seria cortado e obrigaria a rolar duas vezes para

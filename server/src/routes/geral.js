@@ -2,6 +2,7 @@ import { Router } from 'express';
 import * as native from '../model/native.js';
 import * as matrix from '../model/matrix.js';
 import * as csat from '../model/csat.js';
+import * as produtividade from '../model/produtividade.js';
 
 export const geral = Router();
 
@@ -104,6 +105,11 @@ geral.get('/csat-native/serie', rota((req) => csat.serieNative(filtrosDaQuery(re
 geral.get('/csat-native/detalhado', rota((req) => csat.detalhadoNative(filtrosDaQuery(req), Number(req.query.limite) || 500)));
 geral.get('/csat-native/filtros', rota((req) => csat.filtrosNative(filtrosDaQuery(req))));
 geral.get('/csat-native/cobertura', rota(() => csat.cobertura('native')));
+
+geral.get('/produtividade/matrix', rota((req) => produtividade.matrix(filtrosDaQuery(req))));
+geral.get('/produtividade/native', rota((req) => produtividade.native(filtrosDaQuery(req))));
+geral.get('/produtividade/elleven', rota((req) => produtividade.elleven(filtrosDaQuery(req))));
+geral.get('/produtividade/filtros', rota((req) => produtividade.filtrosDisponiveis(filtrosDaQuery(req))));
 
 geral.get('/meta', rota(async () => {
   const [nativeUltimo, matrixUltimo] = await Promise.all([native.ultimoDado(), matrix.ultimoDado()]);

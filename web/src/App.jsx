@@ -4,6 +4,7 @@ import { Capa } from './pages/Capa';
 import { Matrix } from './pages/Matrix';
 import { Native } from './pages/Native';
 import { CsatMatrix, CsatNative } from './pages/Csat';
+import { Produtividade } from './pages/Produtividade';
 import { dataBr, horaBr } from './format';
 
 // Ordem de leitura do relatório de origem (pages.json), não ordem alfabética.
@@ -13,8 +14,9 @@ const PAGINAS = [
   { path: '/csat-matrix', label: 'CSAT Matrix' },
   { path: '/native', label: 'Native' },
   { path: '/csat-native', label: 'CSAT Native' },
-  // PRODUTIVIDADE e QUARTIS entram aqui conforme cada tela fica pronta — nada de
-  // aba para tela que não existe.
+  { path: '/produtividade', label: 'Produtividade' },
+  // QUARTIS entra aqui quando a tela ficar pronta — nada de aba para tela que não
+  // existe.
 ];
 
 function Topbar() {
@@ -60,6 +62,7 @@ export default function App() {
         <Route path="/csat-matrix" element={<CsatMatrix />} />
         <Route path="/native" element={<Native />} />
         <Route path="/csat-native" element={<CsatNative />} />
+        <Route path="/produtividade" element={<Produtividade />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </>

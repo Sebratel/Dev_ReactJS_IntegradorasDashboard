@@ -84,6 +84,22 @@ export function useCsatFiltros(qual, periodo) {
   });
 }
 
+/** `qual` = 'matrix' | 'native' | 'elleven' — as três tabelas da PRODUTIVIDADE. */
+export function useProdutividade(qual, filtros) {
+  return useQuery({
+    queryKey: ['produtividade', qual, filtros],
+    queryFn: () => apiGet(`/produtividade/${qual}`, filtros),
+  });
+}
+
+export function useProdutividadeFiltros(periodo) {
+  return useQuery({
+    queryKey: ['produtividade', 'filtros', periodo],
+    queryFn: () => apiGet('/produtividade/filtros', periodo),
+    staleTime: 5 * 60000,
+  });
+}
+
 /** Janela em que a base de avaliações tem dado — a do Native parou em dez/2025. */
 export function useCsatCobertura(qual) {
   return useQuery({
