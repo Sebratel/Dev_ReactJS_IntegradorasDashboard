@@ -100,6 +100,10 @@ export function useProdutividadeFiltros(periodo) {
   });
 }
 
+export function useQuartis(filtros) {
+  return useQuery({ queryKey: ['quartis', filtros], queryFn: () => apiGet('/quartis', filtros) });
+}
+
 /** Janela em que a base de avaliações tem dado — a do Native parou em dez/2025. */
 export function useCsatCobertura(qual) {
   return useQuery({

@@ -148,6 +148,7 @@ export async function matrix(filtros) {
   return [...base.values()].map((a) => {
     const dias = diasPorAgente.get(a) || 0;
     return {
+      email: a.email,
       agente: a.agente,
       atendimentos: a.atendimentos || 0,
       tmaSeg: a.tmaSeg ?? null,
@@ -229,6 +230,7 @@ export async function native(filtros) {
   return [...base.values()].map((a) => {
     const dias = diasPorAgente.get(a) || 0;
     return {
+      email: a.email,
       agente: a.agente,
       atendimentos: a.atendimentos || 0,
       tmaSeg: a.tmaSeg ?? null,
