@@ -76,6 +76,15 @@ export const CORES = {
   blue: '#0D6ABF',
   nativeRed: '#A1343C',
   nativeGreen: '#0C8B36',
+  // cores de ESTADO: reservadas para crítico/atenção/positivo, nunca usadas como
+  // "série 4". Vivem aqui e não soltas nas telas, para trocar num lugar só.
+  critico: '#b3261e',
+  fundoAtencao: '#FDF3D6',
+  fundoPositivo: '#E4F0E2',
+  fundoNeutro: '#F3F2F1',
+  // extremos das escalas de magnitude usadas nos heatmaps
+  branco: '#FFFFFF',
+  verdeEscuro: '#046709',
 };
 
 /** Cores fixas por quartil — mesmo mapeamento das medidas `Cor_*` do modelo original. */

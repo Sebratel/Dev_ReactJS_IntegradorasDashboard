@@ -115,7 +115,7 @@ export function Matrix() {
                     titulo: 'Status',
                     align: 'left',
                     // as cores de estado da paleta: transferido é atenção, finalizado é positivo
-                    corFundo: (d) => (d.status === 'Transferido' ? '#FDF3D6' : d.status === 'Finalizado' ? '#E4F0E2' : null),
+                    corFundo: (d) => (d.status === 'Transferido' ? CORES.fundoAtencao : d.status === 'Finalizado' ? CORES.fundoPositivo : null),
                   },
                   { key: 'protocolo', titulo: 'Protocolo', align: 'left' },
                   { key: 'tme_seg', titulo: 'TME', fmt: hmsSeg },

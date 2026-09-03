@@ -1,5 +1,5 @@
 import { useQuartis, useProdutividadeFiltros } from '../api';
-import { corDoTexto } from '../components/charts';
+import { CORES, CORES_QUARTIL, corDoTexto } from '../components/charts';
 import { Filtro, FiltroPeriodo, periodoPadrao, useFiltros } from '../components/SlicerBar';
 import { Erro, Loading, Vazio, Visual } from '../components/ui';
 import { hmsSeg, int, pct } from '../format';
@@ -16,8 +16,7 @@ import { hmsSeg, int, pct } from '../format';
  * portado — precisaria de credencial de API própria.
  */
 
-const COR_QUARTIL = { Q1: '#00B050', Q2: '#FFFF00', Q3: '#FFC000', Q4: '#FF0000' };
-const SEM_DADO = '#F3F2F1';
+const SEM_DADO = CORES.fundoNeutro;
 
 const valorFormatado = (v, formato) => {
   if (v === null || v === undefined) return '—';
@@ -29,7 +28,7 @@ function Celula({ valor, formato }) {
 }
 
 function CelulaQuartil({ q }) {
-  const fundo = q ? COR_QUARTIL[q] : SEM_DADO;
+  const fundo = q ? CORES_QUARTIL[q] : SEM_DADO;
   return (
     <td
       className="center"

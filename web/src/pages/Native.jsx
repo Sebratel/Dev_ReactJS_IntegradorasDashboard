@@ -45,7 +45,7 @@ export function Native() {
 
   const seriesLegenda = [
     { label: 'Atendidas', cor: CORES.gold },
-    { label: 'Perdidas', cor: '#b3261e' },
+    { label: 'Perdidas', cor: CORES.critico },
     { label: 'TMA médio', cor: CORES.ink, linha: true },
     { label: 'TME médio', cor: CORES.blue, linha: true },
   ];
@@ -87,7 +87,7 @@ export function Native() {
                 data={serie.data}
                 barras={[
                   { key: 'atendidas', nome: 'Atendidas', cor: CORES.gold },
-                  { key: 'perdidas', nome: 'Perdidas', cor: '#b3261e' },
+                  { key: 'perdidas', nome: 'Perdidas', cor: CORES.critico },
                 ]}
                 linhas={[
                   { key: 'tmaSeg', nome: 'TMA médio', cor: CORES.ink, fmt: hmsSeg },

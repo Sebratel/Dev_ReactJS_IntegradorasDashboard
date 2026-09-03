@@ -82,7 +82,7 @@ export function Produtividade() {
           titulo: 'CSAT',
           fmt: (v) => (v === null ? '—' : pct(v, 1)),
           // escala própria (branco -> verde), como no relatório de origem
-          corFundo: comHeatmap(dados, 'csat', '#FFFFFF', '#046709'),
+          corFundo: comHeatmap(dados, 'csat', CORES.branco, CORES.verdeEscuro),
         },
         ...tempos,
       ];
