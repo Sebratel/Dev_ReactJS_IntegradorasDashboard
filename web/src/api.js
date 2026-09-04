@@ -112,6 +112,30 @@ export function useSupMassivas(filtros) {
   return useQuery({ queryKey: ['sup', 'massivas', filtros], queryFn: () => apiGet('/sup/massivas', filtros) });
 }
 
+export function useAnaliticoAtendimento(filtros) {
+  return useQuery({ queryKey: ['analiticos', 'atendimento', filtros], queryFn: () => apiGet('/analiticos/atendimento', filtros) });
+}
+
+export function useAnaliticoHsm(filtros) {
+  return useQuery({ queryKey: ['analiticos', 'hsm', filtros], queryFn: () => apiGet('/analiticos/hsm', filtros) });
+}
+
+export function useAnaliticoCx(filtros) {
+  return useQuery({ queryKey: ['analiticos', 'cx', filtros], queryFn: () => apiGet('/analiticos/cx', filtros) });
+}
+
+export function useAnaliticoCxDetalhe(filtros) {
+  return useQuery({ queryKey: ['analiticos', 'cx', 'detalhe', filtros], queryFn: () => apiGet('/analiticos/cx/detalhamento', filtros) });
+}
+
+export function useAnaliticosFiltros(periodo) {
+  return useQuery({
+    queryKey: ['analiticos', 'filtros', periodo],
+    queryFn: () => apiGet('/analiticos/filtros', periodo),
+    staleTime: 5 * 60000,
+  });
+}
+
 export function useSupResumo(qual, filtros) {
   return useQuery({ queryKey: ['sup', qual, 'resumo', filtros], queryFn: () => apiGet(`/sup/${qual}/resumo`, filtros) });
 }

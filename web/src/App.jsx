@@ -9,6 +9,7 @@ import { Quartis } from './pages/Quartis';
 import { CapaSup } from './pages/CapaSup';
 import { SupExecutivo } from './pages/SupExecutivo';
 import { SupMatrix, SupNative } from './pages/SupPlataforma';
+import { AnaliticoAtendimento, AnaliticoCx, AnaliticoHsm } from './pages/Analiticos';
 import { dataBr, horaBr } from './format';
 
 /**
@@ -46,6 +47,19 @@ const RELATORIOS = [
       { path: '/sup/matrix', label: 'Matrix' },
       { path: '/sup/native', label: 'Native' },
       { path: '/sup/executivo', label: 'Report Executivo' },
+    ],
+  },
+  {
+    // Não vêm de .pbip: são os relatórios que a aplicação dev_ReactJs_DashboardUX
+    // mostra hoje raspando a web do MatrixGO e chamando a API do Data Hub. Aqui
+    // saem direto do banco, que é onde já estavam.
+    id: 'analiticos',
+    label: 'Analíticos',
+    titulo: 'Relatórios Analíticos de Atendimento e HSM',
+    paginas: [
+      { path: '/analiticos', label: 'Atendimento', fim: true },
+      { path: '/analiticos/hsm', label: 'Mensagens HSM' },
+      { path: '/analiticos/cx', label: 'CX Pós-Instalação' },
     ],
   },
 ];
@@ -127,6 +141,9 @@ export default function App() {
         <Route path="/sup/matrix" element={<SupMatrix />} />
         <Route path="/sup/native" element={<SupNative />} />
         <Route path="/sup/executivo" element={<SupExecutivo />} />
+        <Route path="/analiticos" element={<AnaliticoAtendimento />} />
+        <Route path="/analiticos/hsm" element={<AnaliticoHsm />} />
+        <Route path="/analiticos/cx" element={<AnaliticoCx />} />
         <Route path="*" element={<Navigate to="/geral" replace />} />
       </Routes>
     </>

@@ -5,6 +5,7 @@ import * as csat from '../model/csat.js';
 import * as produtividade from '../model/produtividade.js';
 import * as quartis from '../model/quartis.js';
 import * as sup from '../model/sup.js';
+import * as analiticos from '../model/analiticos.js';
 
 export const geral = Router();
 
@@ -54,7 +55,7 @@ function periodo(req) {
   const dois = (n) => String(n).padStart(2, '0');
   const iso = (d) => `${d.getFullYear()}-${dois(d.getMonth() + 1)}-${dois(d.getDate())}`
     + ` ${dois(d.getHours())}:${dois(d.getMinutes())}:${dois(d.getSeconds())}`;
-  return { de: iso(de), ate: iso(ateExclusivo) };
+  return { de: iso(de), ate: iso(ateExclusivo), ateInclusivo: iso(ate) };
 }
 
 function filtrosDaQuery(req) {
@@ -69,6 +70,12 @@ function filtrosDaQuery(req) {
     ativoReceptivo: req.query.ativoReceptivo,
     status: req.query.status,
     servico: req.query.servico,
+    // analíticos (atendimento / HSM / CX)
+    canal: req.query.canal,
+    template: req.query.template,
+    categoria: req.query.categoria,
+    fluxo: req.query.fluxo,
+    cidade: req.query.cidade,
     // CSAT
     pergunta: req.query.pergunta,
     resposta: req.query.resposta,
@@ -128,6 +135,12 @@ geral.get('/sup/matrix/detalhamento', rota((req) => sup.detalhamentoMatrix(filtr
 geral.get('/sup/native/resumo', rota((req) => sup.resumoNative(filtrosDaQuery(req))));
 geral.get('/sup/native/detalhamento', rota((req) => sup.detalhamentoNative(filtrosDaQuery(req), Number(req.query.limite) || 500)));
 geral.get('/sup/filtros', rota((req) => sup.filtrosDisponiveis(filtrosDaQuery(req))));
+
+geral.get('/analiticos/atendimento', rota((req) => analiticos.atendimento(filtrosDaQuery(req))));
+geral.get('/analiticos/hsm', rota((req) => analiticos.hsm(filtrosDaQuery(req))));
+geral.get('/analiticos/cx', rota((req) => analiticos.cx(filtrosDaQuery(req))));
+geral.get('/analiticos/cx/detalhamento', rota((req) => analiticos.detalhamentoCx(filtrosDaQuery(req), Number(req.query.limite) || 500)));
+geral.get('/analiticos/filtros', rota((req) => analiticos.filtrosDisponiveis(filtrosDaQuery(req))));
 
 geral.get('/meta', rota(async () => {
   const [nativeUltimo, matrixUltimo] = await Promise.all([native.ultimoDado(), matrix.ultimoDado()]);
