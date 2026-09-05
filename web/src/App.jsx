@@ -82,23 +82,34 @@ function Topbar({ relatorio }) {
 
       <h1>{relatorio.titulo}</h1>
 
-      <span className="seg seg-relatorio" title="Relatório">
-        {RELATORIOS.map((r) => (
-          <NavLink
-            key={r.id}
-            to={r.paginas[0]?.path || `/${r.id}`}
-            className={r.id === relatorio.id ? 'on' : ''}
-          >
-            {r.label}
-          </NavLink>
-        ))}
-      </span>
-
       <div className="updated" title="Registro mais recente na base do Native">
         <span className={`live-dot${isError ? ' error' : ultimo ? '' : ' stale'}`} />
         {isError ? 'API indisponível' : ultimo ? <>dado <b>{dataBr(ultimo)} {horaBr(ultimo)}</b></> : 'conectando…'}
       </div>
     </header>
+  );
+}
+
+/**
+ * Faixa dos relatórios. Ela existe porque três relatórios diferentes convivem no
+ * mesmo dashboard e dois deles têm páginas de mesmo nome — a separação precisa ser
+ * estrutural, não um controle discreto no canto. A contagem ao lado do nome dá a
+ * dimensão de cada bloco antes de entrar nele.
+ */
+function BarraRelatorios({ relatorio }) {
+  return (
+    <nav className="barra-relatorios" aria-label="Relatórios">
+      {RELATORIOS.map((r) => (
+        <NavLink
+          key={r.id}
+          to={r.paginas[0]?.path || `/${r.id}`}
+          className={r.id === relatorio.id ? 'on' : ''}
+        >
+          {r.label}
+          <span className="quantas">{r.paginas.length}</span>
+        </NavLink>
+      ))}
+    </nav>
   );
 }
 
@@ -128,6 +139,7 @@ export default function App() {
   return (
     <>
       <Topbar relatorio={relatorio} />
+      <BarraRelatorios relatorio={relatorio} />
       <PageNav relatorio={relatorio} />
       <Routes>
         <Route path="/geral" element={<Capa />} />

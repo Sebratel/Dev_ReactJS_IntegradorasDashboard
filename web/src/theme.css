@@ -36,6 +36,8 @@
 
   /* alturas do "cromo" — a área útil dos gráficos é calculada a partir daqui */
   --h-topbar: 52px;
+  /* faixa que separa os relatórios (Geral / Suporte / Analíticos) */
+  --h-relatorios: 40px;
   --h-nav: 36px;
   --h-filtros: 50px;
   --gap: 10px;
@@ -48,7 +50,7 @@
   /* 36px = padding da .page (10 em cima + 14 embaixo) + o gap entre as duas faixas
      + as bordas de 1px da topbar e da navegação. Medido: com 34 sobrava 1px de
      rolagem em 1440x900, o bastante para nascer uma barra de rolagem. */
-  --chrome: calc(var(--h-topbar) + var(--h-nav) + var(--h-filtros) + var(--h-chips) + var(--h-aviso) + var(--h-subnav) + var(--h-kpis) + 36px);
+  --chrome: calc(var(--h-topbar) + var(--h-relatorios) + var(--h-nav) + var(--h-filtros) + var(--h-chips) + var(--h-aviso) + var(--h-subnav) + var(--h-kpis) + 36px);
   --util: calc(100vh - var(--chrome));
 }
 
@@ -144,6 +146,50 @@ body {
 .icon-btn .spin { display: inline-block; animation: rot 1s linear infinite; }
 @keyframes rot { to { transform: rotate(360deg); } }
 
+/* ------------------------------------------------- faixa de relatórios */
+/* Três relatórios diferentes convivem aqui, e dois deles têm páginas de mesmo
+   nome. A faixa é ESCURA de propósito: entre a barra branca do topo e as abas
+   brancas da tela, ela corta a leitura e diz "daqui para baixo é outro
+   relatório" — que um controle discreto no topo não dizia. */
+.barra-relatorios {
+  background: linear-gradient(160deg, #35322F 0%, var(--pbi-ink) 100%);
+  height: var(--h-relatorios);
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 0 12px;
+  position: sticky;
+  top: var(--h-topbar);
+  z-index: 41;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.barra-relatorios::-webkit-scrollbar { display: none; }
+
+.barra-relatorios a {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 0 18px;
+  font-size: 12px; font-weight: 700; letter-spacing: 0.9px; text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.62);
+  text-decoration: none; white-space: nowrap;
+  border-bottom: 3px solid transparent;
+  transition: color 0.12s ease, background 0.12s ease;
+}
+.barra-relatorios a:hover { color: #fff; background: rgba(255, 255, 255, 0.08); }
+.barra-relatorios a.on {
+  color: #fff;
+  background: var(--pbi-primary);
+  border-bottom-color: var(--pbi-gold);
+}
+/* contagem de telas do relatório: dá a dimensão de cada bloco sem abrir */
+.barra-relatorios a .quantas {
+  font-size: 10px; font-weight: 700; letter-spacing: 0;
+  color: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 999px; padding: 1px 7px;
+}
+.barra-relatorios a.on .quantas { color: #fff; background: rgba(0, 0, 0, 0.28); }
+
 /* --------------------------------------------------------- navegação */
 .pagenav {
   background: var(--pbi-white);
@@ -155,7 +201,7 @@ body {
   overflow-x: auto;
   scrollbar-width: none;
   position: sticky;
-  top: var(--h-topbar);
+  top: calc(var(--h-topbar) + var(--h-relatorios));
   z-index: 39;
 }
 .pagenav::-webkit-scrollbar { display: none; }
@@ -205,7 +251,7 @@ body {
 /* ------------------------------------------------------- barra de filtros */
 .filtros {
   position: sticky;
-  top: calc(var(--h-topbar) + var(--h-nav));
+  top: calc(var(--h-topbar) + var(--h-relatorios) + var(--h-nav));
   z-index: 30;
   display: flex;
   align-items: center;
@@ -680,9 +726,16 @@ table.matrix .total, table.matrix th.total { background: #FDF7E0 !important; fon
   .topbar h1 { display: none; }
 }
 
+/* Tela baixa (768p, TV, projetor): apara-se o CROMO, não o conteúdo. Cada pixel
+   devolvido aqui é pixel que volta para o visual — e é o que faz a conta fechar
+   sem descer o piso de legibilidade dos cards. */
 @media (max-height: 780px) {
-  :root { --h-filtros: 46px; }
+  :root { --h-filtros: 46px; --h-relatorios: 34px; --h-nav: 32px; }
   .kpi { min-height: 54px; }
+  .page { padding-bottom: 10px; }
+  /* o -4px acompanha o padding menor da .page */
+  :root { --chrome: calc(var(--h-topbar) + var(--h-relatorios) + var(--h-nav) + var(--h-filtros)
+    + var(--h-chips) + var(--h-aviso) + var(--h-subnav) + var(--h-kpis) + 32px); }
 }
 
 /* alturas dos visuais das páginas de dados — clamp() sobre a área útil (--util) */
@@ -744,18 +797,6 @@ table.matrix td.rowhead.clicavel:hover { background: #FCF3F4; }
 .btn-exportar:hover { background: #fff; color: var(--pbi-primary); border-color: #fff; }
 
 table.pbi th .ord { vertical-align: -1px; margin-left: 3px; color: var(--pbi-primary); }
-
-/* Alternador de relatório na barra do topo. Reusa o visual do controle segmentado,
-   mas com links (a URL diz qual relatório está aberto). */
-.seg-relatorio { border-color: var(--pbi-grid); flex: none; }
-.seg-relatorio a {
-  display: inline-flex; align-items: center;
-  padding: 3px 13px; height: 24px;
-  font-size: 11.5px; font-weight: 700; letter-spacing: 0.4px;
-  color: var(--pbi-muted); text-decoration: none; text-transform: uppercase;
-}
-.seg-relatorio a:hover { background: #FAF9F8; color: var(--pbi-ink); }
-.seg-relatorio a.on { background: var(--pbi-primary); color: #fff; }
 
 .pagenav-vazio {
   display: flex; align-items: center; height: var(--h-nav);
