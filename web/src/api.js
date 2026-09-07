@@ -1,13 +1,54 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { encerrarSessao } from './auth/session.jsx';
+import { tokenAtual } from './auth/firebase';
 
-async function apiGet(path, params) {
+/** Monta a querystring ignorando o que está vazio. */
+export function buildQuery(params) {
   const qs = new URLSearchParams();
   for (const [k, v] of Object.entries(params || {})) {
     if (v === undefined || v === null || v === '' || (Array.isArray(v) && !v.length)) continue;
     qs.set(k, Array.isArray(v) ? v.join(',') : String(v));
   }
-  const url = `/api/geral${path}${qs.toString() ? `?${qs}` : ''}`;
-  const resp = await fetch(url);
+  return qs.toString();
+}
+
+/**
+ * ÚNICO caminho de saída para a API. Todo `fetch` do dashboard passa por aqui.
+ *
+ * Isso não é zelo estético: um `fetch` cru esquecido num botão sai sem cabeçalho
+ * de autorização, toma 401 em silêncio, a ação nunca acontece — e ainda parece
+ * ter funcionado, porque o cache do front recarrega de todo jeito.
+ *
+ * O 401 é tratado com UMA renovação forçada antes de desistir. Só se a segunda
+ * tentativa também falhar a sessão é encerrada: derrubar na primeira falha
+ * transformaria um token vencido em cache (coisa normal) em logout.
+ */
+export async function apiFetch(url, opcoes = {}) {
+  const comToken = async (forcar) => {
+    const token = await tokenAtual(forcar).catch(() => null);
+    return fetch(url, {
+      ...opcoes,
+      headers: {
+        ...(opcoes.headers || {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+  };
+
+  let resp = await comToken(false);
+  if (resp.status === 401) {
+    resp = await comToken(true);
+    if (resp.status === 401) {
+      encerrarSessao('expirada', `${url} devolveu 401 mesmo após renovar o token`);
+    }
+  }
+  return resp;
+}
+
+async function apiGet(path, params) {
+  const qs = buildQuery(params);
+  const url = `/api/geral${path}${qs ? `?${qs}` : ''}`;
+  const resp = await apiFetch(url);
   if (!resp.ok) {
     let detalhe = '';
     try { detalhe = (await resp.json()).error || ''; } catch { /* corpo não-JSON */ }
@@ -16,6 +57,37 @@ async function apiGet(path, params) {
     throw erro;
   }
   return resp.json();
+}
+
+/** Chamadas administrativas — mesmo cliente, mesma renovação de token. */
+export async function apiAdmin(caminho, opcoes = {}) {
+  const resp = await apiFetch(`/api${caminho}`, {
+    ...opcoes,
+    headers: {
+      ...(opcoes.body ? { 'content-type': 'application/json' } : {}),
+      ...(opcoes.headers || {}),
+    },
+  });
+  const corpo = await resp.json().catch(() => null);
+  if (!resp.ok) {
+    const erro = new Error(corpo?.error || `Erro ${resp.status}`);
+    erro.status = resp.status;
+    throw erro;
+  }
+  return corpo;
+}
+
+/**
+ * Botão de atualizar da barra do topo: descarta o cache do servidor e refaz as
+ * consultas da tela. Sem limpar o lado do servidor, o botão não faria nada
+ * visível durante o TTL — e o de Quartis é de 15 minutos.
+ */
+export function useAtualizarAgora() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiAdmin('/cache/limpar', { method: 'POST' }),
+    onSuccess: () => qc.invalidateQueries(),
+  });
 }
 
 export function useHealth() {

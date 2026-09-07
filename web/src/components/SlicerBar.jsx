@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
+import { useMeta } from '../api';
 import { Icone } from './Icone';
 
 /** Acima disso o popover ancorado não serve: vira diálogo centralizado. */
@@ -13,11 +14,21 @@ const LIMITE_POPOVER = 12;
 export function useFiltros(padroes = {}) {
   const [params, setParams] = useSearchParams();
 
+  /**
+   * `assinatura` entra na dependência do memo porque os padrões deixaram de ser
+   * constantes: o período padrão vem do servidor (`usePeriodoPadrao`), e chega
+   * uma volta depois da primeira renderização. Com a dependência só em `params`,
+   * a tela congelava no valor de fábrica e a configuração de "período padrão"
+   * não tinha efeito nenhum — um controle que não fazia nada.
+   */
+  const assinatura = JSON.stringify(padroes);
+
   const valores = useMemo(() => {
     const v = { ...padroes };
     for (const [k, valor] of params.entries()) v[k] = valor;
     return v;
-  }, [params]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params, assinatura]);
 
   const definir = (chave, valor) => {
     const novo = new URLSearchParams(params);
@@ -207,4 +218,21 @@ export function FiltroPeriodo({ de, ate, onChange }) {
   );
 }
 
-export const periodoPadrao = () => ({ de: iso(menosDias(29)), ate: iso(hoje()) });
+/**
+ * Período com que a tela abre.
+ *
+ * Vem do servidor (`/meta` → `periodo.padraoDias`), definido em Configurações →
+ * Datas. Era uma constante de 30 dias aqui, e isso tornava a configuração
+ * decorativa: o admin salvava 90 dias, o servidor passava a aceitar 90, e as
+ * telas continuavam pedindo 30 porque mandavam `de`/`ate` explícitos calculados
+ * deste lado.
+ *
+ * Os 30 dias seguem como valor de fábrica para a primeira renderização, antes de
+ * `/meta` responder — é o mesmo padrão de `params.js`, então na configuração de
+ * fábrica nada pisca.
+ */
+export function usePeriodoPadrao() {
+  const { data: meta } = useMeta();
+  const dias = meta?.periodo?.padraoDias || 30;
+  return useMemo(() => ({ de: iso(menosDias(dias - 1)), ate: iso(hoje()) }), [dias]);
+}

@@ -1,36 +1,138 @@
+import { useMeta } from '../api';
+import { Icone } from '../components/Icone';
+import { frescor, haQuanto, labelDataHora } from '../format';
+
 /**
  * O título original no PBIX desta CAPA está copiado do relatório SUP ("SUP -
  * RELATÓRIOS DETALHADOS INTEGRADORAS") — resquício de duplicar o outro relatório
  * como ponto de partida. Corrigido aqui para o nome real deste relatório.
+ *
+ * O bloco de fontes segue o padrão da capa do `comercial_pbi`: o estado de cada
+ * base, com o frescor ao lado. A pergunta que ele responde aqui é diferente, e
+ * melhor: lá é "quando o ETL leu", aqui é "até quando a base TEM dado" — mostra a
+ * defasagem da origem, não a hora em que alguém copiou. É assim que a base de
+ * CSAT do Native aparece parada em dez/2025 na cara de quem abre o relatório, em
+ * vez de a tela dela parecer só vazia.
  */
+
+const OBJETIVOS = [
+  'TMA (Native e Matrix)',
+  'TME (Native e Matrix)',
+  'Tempos Logado (Native e Matrix)',
+  'Tempos de Pausas (Native e Matrix)',
+  'Pesquisas de Satisfação CSAT e Adesão CSAT',
+  'Adesão atendimentos × abertura de Protocolos Elleven',
+];
+
+/**
+ * Quantas horas de atraso são normais em cada base. Atendimento entra ao vivo;
+ * o analítico e o HSM vêm de rotina diária, então um dia de defasagem ali é o
+ * esperado e não deve acender alerta.
+ */
+const LIMITE_HORAS = {
+  matrix: 6,
+  native: 6,
+  csatMatrix: 24,
+  csatNative: 24,
+  atendimentoAnalitico: 48,
+  hsm: 48,
+  cx: 24,
+};
+
+const ROTULO_ESTADO = {
+  ok: 'em dia',
+  atrasada: 'atrasada',
+  parada: 'parada',
+  'sem-dado': 'sem dado',
+};
+
+export function TabelaFontes({ fontes }) {
+  if (!fontes?.length) {
+    return <p className="capa-fontes-vazio">Consultando o estado das bases…</p>;
+  }
+  return (
+    <table className="capa-fontes">
+      <tbody>
+        {fontes.map((f) => {
+          const estado = f.erro ? 'sem-dado' : frescor(f.ultimo, LIMITE_HORAS[f.id] ?? 24);
+          return (
+            <tr key={f.id}>
+              <td>
+                {f.nome}
+                <span className="capa-fonte-rel">{f.relatorio}</span>
+              </td>
+              <td title={f.erro ? 'A consulta a esta base falhou' : labelDataHora(f.ultimo)}>
+                <span className={`fonte-estado ${estado}`}>
+                  {estado !== 'ok' && <Icone nome="alerta" tamanho={11} />}
+                  {f.erro ? 'indisponível' : haQuanto(f.ultimo)}
+                </span>
+                {!f.erro && estado !== 'ok' && (
+                  <span className="fonte-selo">{ROTULO_ESTADO[estado]}</span>
+                )}
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+}
+
 export function Capa() {
+  const { data: meta, isError } = useMeta();
+
+  const emDia = (meta?.fontes || []).filter(
+    (f) => !f.erro && frescor(f.ultimo, LIMITE_HORAS[f.id] ?? 24) === 'ok',
+  ).length;
+
   return (
     <div className="page">
-      <div className="capa-topo">
+      <section className="capa-topo">
         <img src="/logo-circular-sebratel.png" alt="Sebratel" />
         <div className="txt">
           <h2>GERAL - RELATÓRIOS DETALHADOS INTEGRADORAS</h2>
           <p>Suporte Técnico · MatrixGO e Native Infinity</p>
         </div>
-      </div>
+        <div className="selo">
+          <div>
+            <b>7</b>
+            <span>telas</span>
+          </div>
+          <div>
+            <b>{meta?.fontes ? `${emDia}/${meta.fontes.length}` : '—'}</b>
+            <span>bases em dia</span>
+          </div>
+          <div>
+            <b title={labelDataHora(meta?.matrix)}>
+              {isError ? '—' : meta?.matrix ? haQuanto(meta.matrix) : '—'}
+            </b>
+            <span>último atendimento</span>
+          </div>
+        </div>
+      </section>
 
       <div className="capa">
-        <div className="bloco">
+        <article className="bloco">
           <h3>Objetivo</h3>
           <div className="conteudo">
             <p>Obter uma visão consolidada dos principais indicadores do time de Suporte Técnico:</p>
-            <ul>
-              <li>TMA (Native e Matrix)</li>
-              <li>TME (Native e Matrix)</li>
-              <li>Tempos Logado (Native e Matrix)</li>
-              <li>Tempos de Pausas (Native e Matrix)</li>
-              <li>Pesquisas de Satisfação CSAT e Adesão CSAT</li>
-              <li>Adesão atendimentos × abertura de Protocolos Elleven</li>
-            </ul>
+            <ul>{OBJETIVOS.map((o) => <li key={o}>{o}</li>)}</ul>
           </div>
-        </div>
+        </article>
 
-        <div className="bloco">
+        <article className="bloco">
+          <h3>Estado das bases</h3>
+          <div className="conteudo">
+            <p style={{ marginTop: 0 }}>
+              As consultas vão <b>direto ao MariaDB</b> corporativo e ao <b>Elleven</b>
+              {' '}(PostgreSQL) — não há carga intermediária. O que aparece aqui é até quando cada
+              base <b>tem dado</b>, e não a hora de uma cópia.
+            </p>
+            <TabelaFontes fontes={meta?.fontes} />
+          </div>
+        </article>
+
+        <article className="bloco">
           <h3>Power BI - Sebratel · Histórico de Revisões</h3>
           <div className="conteudo">
             <table className="capa-fontes">
@@ -56,21 +158,16 @@ export function Capa() {
                     </a>
                   </td>
                 </tr>
+                <tr>
+                  <td>Versão 2.0 — 07/09/2026</td>
+                  <td>Migração para web: acessos por tela, recorte de datas e leitura por IA</td>
+                </tr>
               </tbody>
             </table>
           </div>
-        </div>
+        </article>
 
-        <div className="bloco">
-          <h3>Programação de Atualizações</h3>
-          <div className="conteudo">
-            <p>Testes indicam tempo de atualização em torno de <b>20 a 30 minutos</b>.</p>
-            <p>Horários de início das atualizações:</p>
-            <p><b>07:00 — 13:00 — 19:00</b></p>
-          </div>
-        </div>
-
-        <div className="bloco largo">
+        <article className="bloco largo">
           <h3>Quartis - Regras e Definições</h3>
           <div className="conteudo">
             <p>
@@ -134,7 +231,7 @@ export function Capa() {
               indicador.
             </p>
           </div>
-        </div>
+        </article>
       </div>
 
       <div className="rodape">

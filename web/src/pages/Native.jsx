@@ -1,8 +1,9 @@
 import { useNativeDetalhado, useNativeFaixas, useNativeFiltros, useNativeSerie } from '../api';
 import { CORES, ComboChart } from '../components/charts';
-import { Filtro, FiltroPeriodo, periodoPadrao, useFiltros } from '../components/SlicerBar';
+import { Filtro, FiltroPeriodo, usePeriodoPadrao, useFiltros } from '../components/SlicerBar';
 import { Tabela } from '../components/tables';
 import { Erro, Legenda, Loading, Segmentado, Vazio, Visual } from '../components/ui';
+import { BotaoInsights } from '../components/InsightsIA';
 import { dataBr, horaBr, hmsSeg, int, pct } from '../format';
 
 /**
@@ -21,7 +22,7 @@ import { dataBr, horaBr, hmsSeg, int, pct } from '../format';
  *    Aqui são as não-perdidas, mesma definição de `#native_completed_services`.
  */
 export function Native() {
-  const padrao = periodoPadrao();
+  const padrao = usePeriodoPadrao();
   const { valores, definir, limpar, lista, temFiltro } = useFiltros({
     de: padrao.de,
     ate: padrao.ate,
@@ -69,12 +70,15 @@ export function Native() {
         title="Indicadores Native"
         sub="Relatório detalhado com os principais indicadores do Native Infinity"
         actions={
-          <Segmentado
-            valor={valores.granularidade}
-            opcoes={[{ id: 'dia', label: 'dia' }, { id: 'mes', label: 'mês' }]}
-            onChange={(g) => definir('granularidade', g)}
-            titulo="Granularidade do eixo"
-          />
+          <>
+            <Segmentado
+              valor={valores.granularidade}
+              opcoes={[{ id: 'dia', label: 'dia' }, { id: 'mes', label: 'mês' }]}
+              onChange={(g) => definir('granularidade', g)}
+              titulo="Granularidade do eixo"
+            />
+            <BotaoInsights visual="geral-native:serie" titulo="Indicadores Native" filtros={filtros} />
+          </>
         }
       >
         {serie.isLoading ? <Loading />
@@ -131,6 +135,7 @@ export function Native() {
           className="v-tabela"
           title="Distribuição por Faixa de Tempo"
           sub="Espera até o atendimento, sobre o total do recorte"
+          actions={<BotaoInsights visual="geral-native:faixas" titulo="Distribuição por Faixa de Tempo (Native)" filtros={filtros} />}
           flush
         >
           {faixas.isLoading ? <Loading />

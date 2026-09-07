@@ -1,11 +1,12 @@
 import { useRef } from 'react';
 import { useCsatCobertura, useCsatDetalhado, useCsatFiltros, useCsatSerie } from '../api';
 import { CORES, ComboChart } from '../components/charts';
-import { Filtro, FiltroPeriodo, periodoPadrao, useFiltros } from '../components/SlicerBar';
+import { Filtro, FiltroPeriodo, usePeriodoPadrao, useFiltros } from '../components/SlicerBar';
 import { Tabela } from '../components/tables';
 import { Icone } from '../components/Icone';
 import { useAlturaNoCromo } from '../components/cromo';
 import { Erro, Legenda, Loading, Segmentado, Vazio, Visual } from '../components/ui';
+import { BotaoInsights } from '../components/InsightsIA';
 import { dataBr, horaBr, int, pct } from '../format';
 
 /**
@@ -72,7 +73,7 @@ function AvisoCobertura({ cobertura, de, ate }) {
 }
 
 function PaginaCsat({ qual, titulo, subtitulo, colunas, linhas, filtrosDaTela }) {
-  const padrao = periodoPadrao();
+  const padrao = usePeriodoPadrao();
   const { valores, definir, limpar, lista, temFiltro } = useFiltros({
     de: padrao.de, ate: padrao.ate, granularidade: 'dia',
   });
@@ -110,12 +111,17 @@ function PaginaCsat({ qual, titulo, subtitulo, colunas, linhas, filtrosDaTela })
         title={titulo}
         sub={subtitulo}
         actions={
-          <Segmentado
-            valor={valores.granularidade}
-            opcoes={[{ id: 'dia', label: 'dia' }, { id: 'mes', label: 'mês' }]}
-            onChange={(g) => definir('granularidade', g)}
-            titulo="Granularidade do eixo"
-          />
+          <>
+            <Segmentado
+              valor={valores.granularidade}
+              opcoes={[{ id: 'dia', label: 'dia' }, { id: 'mes', label: 'mês' }]}
+              onChange={(g) => definir('granularidade', g)}
+              titulo="Granularidade do eixo"
+            />
+            {/* `qual` já é 'csat-matrix' ou 'csat-native': o id do visual no
+                catálogo do servidor é o mesmo com o prefixo do relatório */}
+            <BotaoInsights visual={`geral-${qual}:serie`} titulo={titulo} filtros={filtros} />
+          </>
         }
       >
         {serie.isLoading ? <Loading />

@@ -1,7 +1,7 @@
 import { useMemo, useRef } from 'react';
 import { useProdutividade, useProdutividadeFiltros } from '../api';
 import { CORES, escalaGradiente } from '../components/charts';
-import { Filtro, FiltroPeriodo, periodoPadrao, useFiltros } from '../components/SlicerBar';
+import { Filtro, FiltroPeriodo, usePeriodoPadrao, useFiltros } from '../components/SlicerBar';
 import { useAlturaNoCromo } from '../components/cromo';
 import { Tabela } from '../components/tables';
 import { Erro, Loading, Vazio, Visual } from '../components/ui';
@@ -37,7 +37,7 @@ function comHeatmap(dados, key, de = CORES.goldLight, ate = CORES.gold600) {
 }
 
 export function Produtividade() {
-  const padrao = periodoPadrao();
+  const padrao = usePeriodoPadrao();
   const { valores, definir, limpar, lista, temFiltro } = useFiltros({
     de: padrao.de, ate: padrao.ate, visao: 'matrix',
   });

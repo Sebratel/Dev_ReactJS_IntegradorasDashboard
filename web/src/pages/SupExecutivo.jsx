@@ -1,10 +1,11 @@
 import { useRef } from 'react';
 import { useSupAcompanhamento, useSupEntrantes, useSupFiltros, useSupMassivas } from '../api';
 import { CORES, ComboChart, corDoTexto, escalaGradiente } from '../components/charts';
-import { Filtro, FiltroPeriodo, periodoPadrao, useFiltros } from '../components/SlicerBar';
+import { Filtro, FiltroPeriodo, usePeriodoPadrao, useFiltros } from '../components/SlicerBar';
 import { useAlturaNoCromo } from '../components/cromo';
 import { Tabela } from '../components/tables';
 import { Erro, Legenda, Loading, Vazio, Visual } from '../components/ui';
+import { BotaoInsights } from '../components/InsightsIA';
 import { dataBr, horaBr, hmsSeg, int, pct } from '../format';
 
 /**
@@ -147,6 +148,7 @@ export function SupExecutivo() {
               + (periodoLongo
                 ? ' · ATENÇÃO: a meta é a média de UM dia (as 6 últimas do mesmo dia da semana), então com período de vários dias a coluna "% vs meta" não compara'
                 : ' · meta = média das 6 últimas datas do mesmo dia da semana')}
+            actions={<BotaoInsights visual="sup-executivo:acompanhamento" titulo="Acompanhamento por Checkpoint" filtros={filtros} />}
             flush
           >
             {acompanhamento.isLoading ? <Loading />
@@ -159,6 +161,7 @@ export function SupExecutivo() {
             className="v-grafico"
             title="Total entrantes (Native + Matrix)"
             sub="Atendimentos por dia em cada plataforma"
+            actions={<BotaoInsights visual="sup-executivo:entrantes" titulo="Total de Entrantes (Native + Matrix)" filtros={filtros} />}
           >
             {entrantes.isLoading ? <Loading />
               : entrantes.isError ? <Erro erro={entrantes.error} />
@@ -184,7 +187,13 @@ export function SupExecutivo() {
         </>
       ) : (
         <div className="grid linha-grafico-tabelas">
-          <Visual className="v-tabela" title="Detalhamento massivas" sub="Eventos de indisponibilidade abertos no período" flush>
+          <Visual
+            className="v-tabela"
+            title="Detalhamento massivas"
+            sub="Eventos de indisponibilidade abertos no período"
+            actions={<BotaoInsights visual="sup-executivo:massivas" titulo="Eventos Massivos" filtros={filtros} />}
+            flush
+          >
             {massivas.isLoading ? <Loading />
               : massivas.isError ? <Erro erro={massivas.error} />
               : !eventos.length ? <Vazio texto="Nenhum evento massivo no período" />

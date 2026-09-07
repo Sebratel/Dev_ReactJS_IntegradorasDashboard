@@ -1,8 +1,9 @@
 import { useMatrixDetalhado, useMatrixFaixas, useMatrixFiltros, useMatrixSerie } from '../api';
 import { CORES, ComboChart } from '../components/charts';
-import { Filtro, FiltroPeriodo, periodoPadrao, useFiltros } from '../components/SlicerBar';
+import { Filtro, FiltroPeriodo, usePeriodoPadrao, useFiltros } from '../components/SlicerBar';
 import { Tabela } from '../components/tables';
 import { Erro, Legenda, Loading, Segmentado, Vazio, Visual } from '../components/ui';
+import { BotaoInsights } from '../components/InsightsIA';
 import { dataBr, horaBr, hmsSeg, int, pct } from '../format';
 
 /**
@@ -17,7 +18,7 @@ import { dataBr, horaBr, hmsSeg, int, pct } from '../format';
  *    contra 26 min de mediana.
  */
 export function Matrix() {
-  const padrao = periodoPadrao();
+  const padrao = usePeriodoPadrao();
   const { valores, definir, limpar, lista, temFiltro } = useFiltros({
     de: padrao.de,
     ate: padrao.ate,
@@ -54,12 +55,15 @@ export function Matrix() {
         title="Indicadores Matrix"
         sub="Relatório detalhado com os principais indicadores do MatrixGO · TMA e TME em mediana"
         actions={
-          <Segmentado
-            valor={valores.granularidade}
-            opcoes={[{ id: 'dia', label: 'dia' }, { id: 'mes', label: 'mês' }]}
-            onChange={(g) => definir('granularidade', g)}
-            titulo="Granularidade do eixo"
-          />
+          <>
+            <Segmentado
+              valor={valores.granularidade}
+              opcoes={[{ id: 'dia', label: 'dia' }, { id: 'mes', label: 'mês' }]}
+              onChange={(g) => definir('granularidade', g)}
+              titulo="Granularidade do eixo"
+            />
+            <BotaoInsights visual="geral-matrix:serie" titulo="Indicadores Matrix" filtros={filtros} />
+          </>
         }
       >
         {serie.isLoading ? <Loading />
@@ -129,6 +133,7 @@ export function Matrix() {
           className="v-tabela"
           title="Distribuição por Faixa de Tempo"
           sub="Espera até a primeira mensagem do agente"
+          actions={<BotaoInsights visual="geral-matrix:faixas" titulo="Distribuição por Faixa de Tempo (Matrix)" filtros={filtros} />}
           flush
         >
           {faixas.isLoading ? <Loading />

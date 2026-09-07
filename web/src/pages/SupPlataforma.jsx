@@ -2,9 +2,10 @@ import { useRef } from 'react';
 import { useSupDetalhamento, useSupFiltros, useSupResumo } from '../api';
 import { CORES } from '../components/charts';
 import { useAlturaNoCromo } from '../components/cromo';
-import { Filtro, FiltroPeriodo, periodoPadrao, useFiltros } from '../components/SlicerBar';
+import { Filtro, FiltroPeriodo, usePeriodoPadrao, useFiltros } from '../components/SlicerBar';
 import { Tabela } from '../components/tables';
 import { Erro, Kpi, Loading, Vazio, Visual } from '../components/ui';
+import { BotaoInsights } from '../components/InsightsIA';
 import { dataBr, horaBr, hmsSeg, int } from '../format';
 
 /**
@@ -21,7 +22,7 @@ import { dataBr, horaBr, hmsSeg, int } from '../format';
  * no Native (durações de ligação, que terminam sozinhas).
  */
 function PaginaPlataforma({ qual, titulo, rotuloTme, filtrosDaTela, colunasDetalhe }) {
-  const padrao = periodoPadrao();
+  const padrao = usePeriodoPadrao();
   const { valores, definir, limpar, lista, temFiltro } = useFiltros({ de: padrao.de, ate: padrao.ate });
 
   const periodo = { de: valores.de, ate: valores.ate };
@@ -44,8 +45,8 @@ function PaginaPlataforma({ qual, titulo, rotuloTme, filtrosDaTela, colunasDetal
     { key: 'tmeSeg', titulo: rotuloTme, fmt: hmsSeg },
   ];
 
-  const painel = (tituloVisual, dados, rotuloChave, sub) => (
-    <Visual className="v-tabela" title={tituloVisual} sub={sub} flush>
+  const painel = (tituloVisual, dados, rotuloChave, sub, acoes = null) => (
+    <Visual className="v-tabela" title={tituloVisual} sub={sub} actions={acoes} flush>
       {resumo.isLoading ? <Loading />
         : resumo.isError ? <Erro erro={resumo.error} />
         : !dados?.length ? <Vazio />
@@ -79,7 +80,16 @@ function PaginaPlataforma({ qual, titulo, rotuloTme, filtrosDaTela, colunasDetal
       </div>
 
       <div className={`grid ${temCanal ? 'linha-tres' : 'linha-dupla'}`}>
-        {painel('Resumo por data', resumo.data?.porData, 'Data', 'Um dia por linha')}
+        {/*
+          O botão de IA fica só no resumo POR DATA. O de "por agente" não tem, e
+          isso é deliberado: o catálogo do servidor descarta o bloco `porAgente`
+          antes de montar o prompt, então um botão ali prometeria uma leitura do
+          que ele não envia. Ver `server/src/ia/visuais.js`.
+        */}
+        {painel(
+          'Resumo por data', resumo.data?.porData, 'Data', 'Um dia por linha',
+          <BotaoInsights visual={`sup-${qual}:resumo`} titulo={`Resumo ${titulo} (Suporte)`} filtros={filtros} />,
+        )}
         {painel('Resumo por agente', resumo.data?.porAgente, 'Agente', 'Ordenado por volume')}
         {temCanal && painel('Por canal', resumo.data?.porCanal, 'Canal', 'De onde vem o atendimento')}
       </div>

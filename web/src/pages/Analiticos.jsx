@@ -4,9 +4,10 @@ import {
 } from '../api';
 import { CORES, ComboChart } from '../components/charts';
 import { useAlturaNoCromo } from '../components/cromo';
-import { Filtro, FiltroPeriodo, periodoPadrao, useFiltros } from '../components/SlicerBar';
+import { Filtro, FiltroPeriodo, usePeriodoPadrao, useFiltros } from '../components/SlicerBar';
 import { Tabela } from '../components/tables';
 import { Erro, Kpi, Legenda, Loading, Vazio, Visual } from '../components/ui';
+import { BotaoInsights } from '../components/InsightsIA';
 import { dataBr, horaBr, hmsSeg, int, pct } from '../format';
 
 /**
@@ -44,7 +45,7 @@ const colBarra = (key, titulo, fmt = int) => ({ key, titulo, fmt, databar: { cor
 // -------------------------------------------------------------- ATENDIMENTO
 
 export function AnaliticoAtendimento() {
-  const padrao = periodoPadrao();
+  const padrao = usePeriodoPadrao();
   const { valores, definir, limpar, lista, temFiltro } = useFiltros({ de: padrao.de, ate: padrao.ate });
   const periodo = { de: valores.de, ate: valores.ate };
   const filtros = {
@@ -84,7 +85,12 @@ export function AnaliticoAtendimento() {
         ]}
       />
 
-      <Visual className="v-grafico" title="Atendimentos por dia" sub="Total e finalizados">
+      <Visual
+        className="v-grafico"
+        title="Atendimentos por dia"
+        sub="Total e finalizados"
+        actions={<BotaoInsights visual="analiticos-atendimento:geral" titulo="Analítico de Atendimento" filtros={filtros} />}
+      >
         {consulta.isLoading ? <Loading />
           : consulta.isError ? <Erro erro={consulta.error} />
           : !d?.porDia?.length ? <Vazio />
@@ -136,7 +142,7 @@ export function AnaliticoAtendimento() {
 // ---------------------------------------------------------------------- HSM
 
 export function AnaliticoHsm() {
-  const padrao = periodoPadrao();
+  const padrao = usePeriodoPadrao();
   const { valores, definir, limpar, lista, temFiltro } = useFiltros({ de: padrao.de, ate: padrao.ate });
   const periodo = { de: valores.de, ate: valores.ate };
   const filtros = { ...periodo, template: lista('template'), categoria: lista('categoria') };
@@ -169,7 +175,12 @@ export function AnaliticoHsm() {
         ]}
       />
 
-      <Visual className="v-grafico" title="Mensagens por dia" sub="Enviadas, entregues e lidas">
+      <Visual
+        className="v-grafico"
+        title="Mensagens por dia"
+        sub="Enviadas, entregues e lidas"
+        actions={<BotaoInsights visual="analiticos-hsm:geral" titulo="Mensagens HSM" filtros={filtros} />}
+      >
         {consulta.isLoading ? <Loading />
           : consulta.isError ? <Erro erro={consulta.error} />
           : !d?.porDia?.length ? <Vazio />
@@ -229,7 +240,7 @@ export function AnaliticoHsm() {
 // ----------------------------------------------------------------------- CX
 
 export function AnaliticoCx() {
-  const padrao = periodoPadrao();
+  const padrao = usePeriodoPadrao();
   const { valores, definir, limpar, lista, temFiltro } = useFiltros({ de: padrao.de, ate: padrao.ate });
   const periodo = { de: valores.de, ate: valores.ate };
   const filtros = { ...periodo, fluxo: lista('fluxo'), cidade: lista('cidade') };
@@ -267,6 +278,7 @@ export function AnaliticoCx() {
         className="v-grafico"
         title="Disparos por dia"
         sub="A tabela guarda três fluxos do n8n — use o filtro para isolar o CX pós-instalação (cs_cx_72hrs)"
+        actions={<BotaoInsights visual="analiticos-cx:geral" titulo="CX Pós-Instalação" filtros={filtros} />}
       >
         {consulta.isLoading ? <Loading />
           : consulta.isError ? <Erro erro={consulta.error} />

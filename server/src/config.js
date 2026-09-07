@@ -58,6 +58,32 @@ export const config = {
     username: process.env.NATIVE_API_USERNAME,
     password: process.env.NATIVE_API_PASSWORD,
   },
+
+  /**
+   * Autenticação por Firebase (não por Google Identity Services).
+   *
+   * A escolha não é estilo: o GSI baixa `accounts.google.com/gsi/client` em tempo
+   * de execução e o botão de login não reage atrás do firewall da Sebratel. O
+   * `comercial_pbi`, de onde este dashboard herda quase tudo, usa GSI — e por
+   * isso NÃO serve de referência de autenticação. Ver `auth/firebaseToken.js`.
+   *
+   * `habilitado` fica FALSO por padrão: liga sozinho quando alguém preenche
+   * FIREBASE_PROJECT_ID. Assim ninguém precisa mexer em código no dia em que o
+   * projeto Firebase for criado, e o dashboard continua abrindo até então.
+   */
+  auth: {
+    habilitado: process.env.AUTH_ENABLED !== undefined
+      ? String(process.env.AUTH_ENABLED).toLowerCase() !== 'false'
+      : !!process.env.FIREBASE_PROJECT_ID,
+    firebaseProjectId: process.env.FIREBASE_PROJECT_ID || '',
+    dominio: (process.env.ALLOWED_DOMAIN || 'sebratel.com.br').toLowerCase(),
+  },
+
+  // Onde ficam papéis, permissões por tela, parâmetros e a chave de IA cifrada.
+  // Em Docker isto tem de ser um volume, senão a configuração morre com o container.
+  accessPath: process.env.ACCESS_PATH
+    ? path.resolve(process.env.ACCESS_PATH)
+    : path.resolve(__dirname, '../data/access.json'),
 };
 
 export function assertConfig() {

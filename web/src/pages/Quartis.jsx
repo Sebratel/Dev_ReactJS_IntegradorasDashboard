@@ -1,6 +1,6 @@
 import { useQuartis, useProdutividadeFiltros } from '../api';
 import { CORES, CORES_QUARTIL, corDoTexto } from '../components/charts';
-import { Filtro, FiltroPeriodo, periodoPadrao, useFiltros } from '../components/SlicerBar';
+import { Filtro, FiltroPeriodo, usePeriodoPadrao, useFiltros } from '../components/SlicerBar';
 import { Erro, Loading, Vazio, Visual } from '../components/ui';
 import { hmsSeg, int, pct } from '../format';
 
@@ -41,7 +41,7 @@ function CelulaQuartil({ q }) {
 }
 
 export function Quartis() {
-  const padrao = periodoPadrao();
+  const padrao = usePeriodoPadrao();
   const { valores, definir, limpar, lista, temFiltro } = useFiltros({ de: padrao.de, ate: padrao.ate });
 
   const periodo = { de: valores.de, ate: valores.ate };

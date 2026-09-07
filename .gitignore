@@ -9,6 +9,15 @@ server/public/
 .env.*
 !.env.example
 
+# Estado de runtime do servidor: papéis e permissões por tela (access.json), o
+# recorte de datas (params.json), a configuração do provedor de IA com a chave
+# cifrada (ia.json) e a CHAVE DE CIFRA em si (.secret).
+#
+# Nada disso é código, e o .secret é segredo de verdade: com ele, a chave de API
+# gravada deixa de estar protegida. Em produção esta pasta tem de ser um volume,
+# senão a configuração morre junto com o container.
+server/data/
+
 # diversos
 *.log
 .DS_Store
