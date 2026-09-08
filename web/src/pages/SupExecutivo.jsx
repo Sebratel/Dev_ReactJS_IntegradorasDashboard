@@ -37,7 +37,23 @@ function TabelaAcompanhamento({ dados }) {
       dados={dados.map((d, i) => ({ ...d, __key: d.hora + i }))}
       colunas={[
         { key: 'hora', titulo: 'Checkpoint', align: 'left', bold: true },
-        { key: 'agentesTotal', titulo: 'Agentes', fmt: int },
+        /**
+         * Três colunas de atendentes, como no BI — e medidas por FAIXA (quem
+         * atuou entre o checkpoint anterior e este), não acumuladas.
+         *
+         * O total NÃO é a soma: quem atende nas duas plataformas conta uma vez.
+         * Medido em 05/09/2026, 25 agentes do meio-dia estão nas duas, e a soma
+         * dava 72 onde o correto é 47.
+         */
+        { key: 'agentesMatrix', titulo: 'Atend. Matrix', fmt: int },
+        { key: 'agentesNative', titulo: 'Atend. Native', fmt: int },
+        {
+          key: 'agentesTotal',
+          titulo: 'Atend. total',
+          fmt: int,
+          bold: true,
+          title: 'Agentes distintos na faixa; quem atua nas duas plataformas conta uma vez',
+        },
         { key: 'qtdMatrix', titulo: 'Qtd Matrix', fmt: int },
         { key: 'tmaMatrixSeg', titulo: 'TMA Matrix', fmt: hmsSeg },
         { key: 'tmeMatrixSeg', titulo: 'TME Matrix', fmt: hmsSeg },
@@ -58,7 +74,26 @@ function TabelaAcompanhamento({ dados }) {
           fmt: (v) => (v === null ? '—' : pct(v, 1)),
           corFundo: (d) => (d.desvioMeta === null ? null : d.desvioMeta >= 0 ? CORES.fundoPositivo : CORES.fundoAtencao),
         },
-        { key: 'nsMatrix', titulo: 'NS Matrix', fmt: (v) => (v === null ? '—' : pct(v, 1)), corFundo: (d) => corDoNS(d.nsMatrix) },
+        /**
+         * As contagens absolutas do nível de serviço, que o BI mostra numa tabela
+         * separada ("NÍVEL DE SERVIÇO"). Entram aqui porque são por checkpoint
+         * como as demais, e um visual só para elas gastaria uma faixa inteira da
+         * tela — mas sem as contagens não há como conferir o percentual.
+         */
+        {
+          key: 'ns45',
+          titulo: '≤45s',
+          fmt: int,
+          title: 'Entradas de fila do Matrix respondidas em até 45s',
+        },
+        {
+          key: 'nsMatrix',
+          titulo: 'NS Matrix',
+          fmt: (v) => (v === null ? '—' : pct(v, 1)),
+          corFundo: (d) => corDoNS(d.nsMatrix),
+          title: 'Sobre as ENTRADAS de fila (primeiro trecho de cada protocolo), não sobre as linhas',
+        },
+        { key: 'ns25', titulo: '≤25s', fmt: int, title: 'Ligações do Native atendidas em até 25s de espera' },
         { key: 'nsNative', titulo: 'NS Native', fmt: (v) => (v === null ? '—' : pct(v, 1)), corFundo: (d) => corDoNS(d.nsNative) },
         { key: 'nsFinal', titulo: 'NS final', fmt: (v) => (v === null ? '—' : pct(v, 1)), bold: true, corFundo: (d) => corDoNS(d.nsFinal) },
         { key: 'massivasEventos', titulo: 'Massivas', fmt: int },
@@ -79,7 +114,7 @@ export function SupExecutivo() {
   // (as 6 últimas datas do mesmo dia da semana), então comparar com um período de
   // vários dias somaria os entrantes de todos contra a régua de um só.
   const dia = diaPadrao();
-  const { valores, definir, limpar, lista, temFiltro } = useFiltros({
+  const { valores, definir, definirVarios, limpar, lista, temFiltro } = useFiltros({
     de: dia, ate: dia, visao: 'indicadores',
   });
   const periodoLongo = valores.de !== valores.ate;
@@ -117,7 +152,7 @@ export function SupExecutivo() {
     <div className="page">
       <div className="filtros">
         <span className="rotulo">Filtros</span>
-        <FiltroPeriodo de={valores.de} ate={valores.ate} onChange={(de, ate) => { definir('de', de); definir('ate', ate); }} />
+        <FiltroPeriodo de={valores.de} ate={valores.ate} onChange={(de, ate) => { definirVarios({ de, ate }); }} />
         <Filtro nome="Serviço Matrix" opcoes={opcoes.data?.servico || []} marcados={lista('servico')} onChange={(v) => definir('servico', v)} />
         <Filtro nome="Ativo/Receptivo" opcoes={opcoes.data?.ativoReceptivo || []} marcados={lista('ativoReceptivo')} onChange={(v) => definir('ativoReceptivo', v)} />
         <Filtro nome="Fila Native" opcoes={opcoes.data?.fila || []} marcados={lista('fila')} onChange={(v) => definir('fila', v)} />
@@ -144,7 +179,8 @@ export function SupExecutivo() {
           <Visual
             className="v-tabela"
             title="Acompanhamento de indicadores"
-            sub={'Acumulado até cada checkpoint · NS Matrix conta resposta em até 45s, NS Native em até 25s de espera'
+            sub={'Acumulado até cada checkpoint — exceto atendentes e massivas, contados por faixa'
+              + ' · NS Matrix conta a resposta em até 45s na ENTRADA da fila; NS Native, 25s de espera'
               + (periodoLongo
                 ? ' · ATENÇÃO: a meta é a média de UM dia (as 6 últimas do mesmo dia da semana), então com período de vários dias a coluna "% vs meta" não compara'
                 : ' · meta = média das 6 últimas datas do mesmo dia da semana')}

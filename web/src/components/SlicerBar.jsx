@@ -30,21 +30,40 @@ export function useFiltros(padroes = {}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params, assinatura]);
 
-  const definir = (chave, valor) => {
-    const novo = new URLSearchParams(params);
-    if (valor === null || valor === undefined || valor === '' || (Array.isArray(valor) && !valor.length)) {
-      novo.delete(chave);
-    } else {
-      novo.set(chave, Array.isArray(valor) ? valor.join(',') : String(valor));
-    }
-    setParams(novo, { replace: false });
+  const vazio = (valor) => valor === null || valor === undefined || valor === ''
+    || (Array.isArray(valor) && !valor.length);
+
+  /**
+   * Grava VÁRIOS filtros numa atualização só.
+   *
+   * Isto existe por causa de um bug que travava o filtro de período: as telas
+   * chamavam `definir('de', x)` e `definir('ate', y)` em sequência no mesmo
+   * evento, e as duas montavam a URL a partir do `params` capturado no closure —
+   * o mesmo valor, o de antes do clique. A segunda chamada sobrescrevia a
+   * primeira, o `de` era descartado e a tela voltava para o início do período
+   * padrão. Na prática, escolher uma data não funcionava: só o fim mudava.
+   *
+   * A forma funcional de `setParams` recebe o estado corrente a cada aplicação,
+   * então nem esta função nem chamadas encadeadas dependem mais do closure.
+   */
+  const definirVarios = (mudancas) => {
+    setParams((atual) => {
+      const novo = new URLSearchParams(atual);
+      for (const [chave, valor] of Object.entries(mudancas)) {
+        if (vazio(valor)) novo.delete(chave);
+        else novo.set(chave, Array.isArray(valor) ? valor.join(',') : String(valor));
+      }
+      return novo;
+    }, { replace: false });
   };
+
+  const definir = (chave, valor) => definirVarios({ [chave]: valor });
 
   const limpar = () => setParams(new URLSearchParams());
 
   const lista = (chave) => (valores[chave] ? String(valores[chave]).split(',').filter(Boolean) : []);
 
-  return { valores, definir, limpar, lista, temFiltro: [...params.keys()].length > 0 };
+  return { valores, definir, definirVarios, limpar, lista, temFiltro: [...params.keys()].length > 0 };
 }
 
 function Marcadores({ opcoes, marcados, alternar, busca }) {
@@ -158,6 +177,8 @@ const menosDias = (n) => new Date(Date.now() - n * 864e5);
 const PRESETS = [
   { id: '7d', label: 'Últimos 7 dias', de: () => iso(menosDias(6)), ate: () => iso(hoje()) },
   { id: '30d', label: 'Últimos 30 dias', de: () => iso(menosDias(29)), ate: () => iso(hoje()) },
+  // 60 dias é o padrão desde 08/09/2026; o preset deixa voltar a ele com um clique
+  { id: '60d', label: 'Últimos 60 dias', de: () => iso(menosDias(59)), ate: () => iso(hoje()) },
   {
     id: 'mes',
     label: 'Este mês',

@@ -74,7 +74,7 @@ function AvisoCobertura({ cobertura, de, ate }) {
 
 function PaginaCsat({ qual, titulo, subtitulo, colunas, linhas, filtrosDaTela }) {
   const padrao = usePeriodoPadrao();
-  const { valores, definir, limpar, lista, temFiltro } = useFiltros({
+  const { valores, definir, definirVarios, limpar, lista, temFiltro } = useFiltros({
     de: padrao.de, ate: padrao.ate, granularidade: 'dia',
   });
 
@@ -91,7 +91,7 @@ function PaginaCsat({ qual, titulo, subtitulo, colunas, linhas, filtrosDaTela })
     <div className="page">
       <div className="filtros">
         <span className="rotulo">Filtros</span>
-        <FiltroPeriodo de={valores.de} ate={valores.ate} onChange={(de, ate) => { definir('de', de); definir('ate', ate); }} />
+        <FiltroPeriodo de={valores.de} ate={valores.ate} onChange={(de, ate) => { definirVarios({ de, ate }); }} />
         {filtrosDaTela.map((f) => (
           <Filtro
             key={f.chave}

@@ -38,7 +38,7 @@ function comHeatmap(dados, key, de = CORES.goldLight, ate = CORES.gold600) {
 
 export function Produtividade() {
   const padrao = usePeriodoPadrao();
-  const { valores, definir, limpar, lista, temFiltro } = useFiltros({
+  const { valores, definir, definirVarios, limpar, lista, temFiltro } = useFiltros({
     de: padrao.de, ate: padrao.ate, visao: 'matrix',
   });
 
@@ -105,7 +105,7 @@ export function Produtividade() {
     <div className="page">
       <div className="filtros">
         <span className="rotulo">Filtros</span>
-        <FiltroPeriodo de={valores.de} ate={valores.ate} onChange={(de, ate) => { definir('de', de); definir('ate', ate); }} />
+        <FiltroPeriodo de={valores.de} ate={valores.ate} onChange={(de, ate) => { definirVarios({ de, ate }); }} />
         {filtrosDaVisao.map((f) => (
           <Filtro
             key={f.chave}

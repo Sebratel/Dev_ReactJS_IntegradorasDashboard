@@ -23,7 +23,7 @@ import { dataBr, horaBr, hmsSeg, int } from '../format';
  */
 function PaginaPlataforma({ qual, titulo, rotuloTme, filtrosDaTela, colunasDetalhe }) {
   const padrao = usePeriodoPadrao();
-  const { valores, definir, limpar, lista, temFiltro } = useFiltros({ de: padrao.de, ate: padrao.ate });
+  const { valores, definir, definirVarios, limpar, lista, temFiltro } = useFiltros({ de: padrao.de, ate: padrao.ate });
 
   const periodo = { de: valores.de, ate: valores.ate };
   const filtros = { ...periodo };
@@ -60,7 +60,7 @@ function PaginaPlataforma({ qual, titulo, rotuloTme, filtrosDaTela, colunasDetal
     <div className="page">
       <div className="filtros">
         <span className="rotulo">Filtros</span>
-        <FiltroPeriodo de={valores.de} ate={valores.ate} onChange={(de, ate) => { definir('de', de); definir('ate', ate); }} />
+        <FiltroPeriodo de={valores.de} ate={valores.ate} onChange={(de, ate) => { definirVarios({ de, ate }); }} />
         {filtrosDaTela.map((f) => (
           <Filtro
             key={f.chave}

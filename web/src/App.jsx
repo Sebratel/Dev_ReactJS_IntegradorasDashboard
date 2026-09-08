@@ -9,7 +9,6 @@ import { Native } from './pages/Native';
 import { CsatMatrix, CsatNative } from './pages/Csat';
 import { Produtividade } from './pages/Produtividade';
 import { Quartis } from './pages/Quartis';
-import { CapaSup } from './pages/CapaSup';
 import { SupExecutivo } from './pages/SupExecutivo';
 import { SupMatrix, SupNative } from './pages/SupPlataforma';
 import { AnaliticoAtendimento, AnaliticoCx, AnaliticoHsm } from './pages/Analiticos';
@@ -34,12 +33,27 @@ import { dataBr, haQuanto, horaBr, labelDataHora } from './format';
  * é o que protege o dado — cada endpoint confere a permissão de novo.
  */
 const RELATORIOS = [
+  /**
+   * A CAPA é um relatório de uma tela só, e não a primeira página de cada
+   * relatório como no Power BI. Decisão do usuário em 08/09/2026: uma capa para
+   * todo o dashboard, porque os três relatórios respondem à mesma pergunta em
+   * canais diferentes. Sem `paginas` de sub-navegação — a faixa de telas
+   * desaparece nela, que é o certo para uma tela única.
+   */
+  {
+    id: 'capa',
+    label: 'Capa',
+    titulo: 'Atendimento ao Cliente · Suporte Técnico',
+    semContagem: true,
+    paginas: [
+      { path: '/capa', label: 'Capa', tela: 'capa', fim: true },
+    ],
+  },
   {
     id: 'geral',
     label: 'Geral',
     titulo: 'GERAL - Relatórios Detalhados Integradoras',
     paginas: [
-      { path: '/geral', label: 'Capa', tela: 'geral-capa', fim: true },
       { path: '/geral/matrix', label: 'Matrix', tela: 'geral-matrix' },
       { path: '/geral/csat-matrix', label: 'CSAT Matrix', tela: 'geral-csat-matrix' },
       { path: '/geral/native', label: 'Native', tela: 'geral-native' },
@@ -53,7 +67,6 @@ const RELATORIOS = [
     label: 'Suporte',
     titulo: 'SUP - Indicadores Suporte',
     paginas: [
-      { path: '/sup', label: 'Capa', tela: 'sup-capa', fim: true },
       { path: '/sup/matrix', label: 'Matrix', tela: 'sup-matrix' },
       { path: '/sup/native', label: 'Native', tela: 'sup-native' },
       { path: '/sup/executivo', label: 'Report Executivo', tela: 'sup-executivo' },
@@ -75,14 +88,13 @@ const RELATORIOS = [
 ];
 
 const ROTAS = [
-  { path: '/geral', tela: 'geral-capa', el: <Capa /> },
+  { path: '/capa', tela: 'capa', el: <Capa /> },
   { path: '/geral/matrix', tela: 'geral-matrix', el: <Matrix /> },
   { path: '/geral/csat-matrix', tela: 'geral-csat-matrix', el: <CsatMatrix /> },
   { path: '/geral/native', tela: 'geral-native', el: <Native /> },
   { path: '/geral/csat-native', tela: 'geral-csat-native', el: <CsatNative /> },
   { path: '/geral/produtividade', tela: 'geral-produtividade', el: <Produtividade /> },
   { path: '/geral/quartis', tela: 'geral-quartis', el: <Quartis /> },
-  { path: '/sup', tela: 'sup-capa', el: <CapaSup /> },
   { path: '/sup/matrix', tela: 'sup-matrix', el: <SupMatrix /> },
   { path: '/sup/native', tela: 'sup-native', el: <SupNative /> },
   { path: '/sup/executivo', tela: 'sup-executivo', el: <SupExecutivo /> },
@@ -190,13 +202,21 @@ function BarraRelatorios({ relatorio, relatorios }) {
           className={r.id === relatorio.id ? 'on' : ''}
         >
           {r.label}
-          <span className="quantas">{r.paginas.length}</span>
+          {/* a capa não leva contagem: "1" ao lado dela seria ruído */}
+          {!r.semContagem && <span className="quantas">{r.paginas.length}</span>}
         </NavLink>
       ))}
     </nav>
   );
 }
 
+/**
+ * Faixa de telas do relatório aberto.
+ *
+ * Relatório de uma tela só — a capa — não ganha a faixa: um único item que já
+ * está aceso na barra de cima não orienta ninguém, e a faixa custa 36px da área
+ * útil. Nesse caso resta só o atalho de Configurações, quando houver.
+ */
 function PageNav({ relatorio }) {
   const { ehAdmin } = useSession();
   if (!relatorio.paginas.length) {
@@ -206,9 +226,11 @@ function PageNav({ relatorio }) {
       </nav>
     );
   }
+  if (relatorio.paginas.length === 1 && !ehAdmin) return null;
+
   return (
     <nav className="pagenav">
-      {relatorio.paginas.map((p) => (
+      {relatorio.paginas.length > 1 && relatorio.paginas.map((p) => (
         <NavLink key={p.path} to={p.path} end={p.fim} className={({ isActive }) => (isActive ? 'active' : '')}>
           {p.label}
         </NavLink>

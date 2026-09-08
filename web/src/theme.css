@@ -173,6 +173,13 @@ body {
   height: var(--h-relatorios);
   display: flex;
   align-items: stretch;
+  /*
+   * Centralizado a pedido do usuário (08/09/2026). `safe center` é o que impede
+   * o efeito colateral clássico: com poucos itens tudo bem, mas se a faixa
+   * transbordar numa tela estreita, o `center` simples empurra o primeiro item
+   * para fora do início da área rolável e ele fica inalcançável.
+   */
+  justify-content: safe center;
   gap: 2px;
   padding: 0 12px;
   position: sticky;
@@ -212,6 +219,8 @@ body {
   background: var(--pbi-white);
   display: flex;
   align-items: stretch;
+  /* centralizada junto da faixa de relatórios — ver a nota do `safe center` lá */
+  justify-content: safe center;
   gap: 2px;
   padding: 0 10px;
   border-bottom: 1px solid var(--pbi-borda);
@@ -681,6 +690,33 @@ table.matrix .total, table.matrix th.total { background: #FDF7E0 !important; fon
 .tooltip-pbi .r i { width: 9px; height: 9px; border-radius: 2px; display: inline-block; margin-right: 6px; }
 
 /* ---------------------------------------------------------------- capa */
+/*
+ * A capa é centralizada e tem largura máxima (pedido do usuário em 08/09/2026).
+ *
+ * Ela é a única tela do dashboard que se LÊ como documento em vez de se varrer
+ * como painel — e texto corrido esticado de ponta a ponta num monitor de 2560px
+ * fica ilegível, porque o olho perde a linha na volta. As telas de dados
+ * continuam ocupando a largura inteira, que é o que elas precisam.
+ */
+.capa-pagina { align-items: center; }
+.capa-centro {
+  width: 100%;
+  max-width: 1500px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+
+/* cada canal do dashboard, no bloco "Canais" */
+.capa-canal { padding: 7px 0; border-bottom: 1px solid #F3F2F1; }
+.capa-canal:last-child { border-bottom: none; padding-bottom: 0; }
+.capa-canal b { color: var(--pbi-primary); font-size: 12.8px; }
+.capa-canal p { margin: 2px 0 3px; }
+.capa-canal span {
+  display: block; font-size: 10.5px; color: var(--pbi-muted); line-height: 1.45;
+}
+
 .capa-topo {
   display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
   background: linear-gradient(120deg, var(--pbi-primary) 0%, #6b2328 58%, #4a181d 100%);

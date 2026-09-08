@@ -30,8 +30,14 @@ const arquivo = () => (process.env.PARAMS_PATH
   ? path.resolve(process.env.PARAMS_PATH)
   : path.resolve(__dirname, '../data/params.json'));
 
-/** Um ano é o teto de fábrica: foi o que o usuário pediu, e foi o que medimos. */
-const PADRAO = { padraoDias: 30, maxDias: 365 };
+/**
+ * Padrão de fábrica: 60 dias de janela, teto de um ano.
+ *
+ * Eram 30 dias, e o usuário pediu 60 em 08/09/2026 — dois meses deixam a
+ * comparação mês a mês visível sem trocar o filtro. O teto de um ano também foi
+ * pedido por ele; a medição que o sustenta está no comentário do topo.
+ */
+const PADRAO = { padraoDias: 60, maxDias: 365 };
 
 /** Acima disso não é escolha, é engano: nenhuma tela daqui compara 10 anos. */
 const LIMITE_ABSOLUTO = 1826; // 5 anos

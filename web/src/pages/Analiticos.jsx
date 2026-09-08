@@ -80,7 +80,7 @@ function tempoCurto(seg) {
 
 export function AnaliticoAtendimento() {
   const padrao = usePeriodoPadrao();
-  const { valores, definir, limpar, lista, temFiltro } = useFiltros({ de: padrao.de, ate: padrao.ate });
+  const { valores, definir, definirVarios, limpar, lista, temFiltro } = useFiltros({ de: padrao.de, ate: padrao.ate });
   const periodo = { de: valores.de, ate: valores.ate };
   const filtros = {
     ...periodo,
@@ -101,7 +101,7 @@ export function AnaliticoAtendimento() {
     <div className="page rola">
       <div className="filtros">
         <span className="rotulo">Filtros</span>
-        <FiltroPeriodo de={valores.de} ate={valores.ate} onChange={(de, ate) => { definir('de', de); definir('ate', ate); }} />
+        <FiltroPeriodo de={valores.de} ate={valores.ate} onChange={(de, ate) => { definirVarios({ de, ate }); }} />
         <Filtro nome="Status" opcoes={opcoes.data?.status || []} marcados={lista('status')} onChange={(v) => definir('status', v)} />
         <Filtro nome="Canal" opcoes={opcoes.data?.canal || []} marcados={lista('canal')} onChange={(v) => definir('canal', v)} />
         <Filtro nome="Ativo/Receptivo" opcoes={opcoes.data?.ativoReceptivo || []} marcados={lista('ativoReceptivo')} onChange={(v) => definir('ativoReceptivo', v)} />
@@ -373,7 +373,7 @@ function leiturasDoAtendimento(d, k) {
 
 export function AnaliticoHsm() {
   const padrao = usePeriodoPadrao();
-  const { valores, definir, limpar, lista, temFiltro } = useFiltros({ de: padrao.de, ate: padrao.ate });
+  const { valores, definir, definirVarios, limpar, lista, temFiltro } = useFiltros({ de: padrao.de, ate: padrao.ate });
   const periodo = { de: valores.de, ate: valores.ate };
   const filtros = { ...periodo, template: lista('template'), categoria: lista('categoria') };
 
@@ -398,7 +398,7 @@ export function AnaliticoHsm() {
     <div className="page rola">
       <div className="filtros">
         <span className="rotulo">Filtros</span>
-        <FiltroPeriodo de={valores.de} ate={valores.ate} onChange={(de, ate) => { definir('de', de); definir('ate', ate); }} />
+        <FiltroPeriodo de={valores.de} ate={valores.ate} onChange={(de, ate) => { definirVarios({ de, ate }); }} />
         <Filtro nome="Template" opcoes={opcoes.data?.template || []} marcados={lista('template')} onChange={(v) => definir('template', v)} />
         <Filtro nome="Categoria" opcoes={opcoes.data?.categoria || []} marcados={lista('categoria')} onChange={(v) => definir('categoria', v)} />
         {/* o fluxo só recorta a seção do n8n: a Meta não conhece esse conceito */}
@@ -713,7 +713,7 @@ export function AnaliticoHsm() {
 
 export function AnaliticoCx() {
   const padrao = usePeriodoPadrao();
-  const { valores, definir, limpar, lista, temFiltro } = useFiltros({ de: padrao.de, ate: padrao.ate });
+  const { valores, definir, definirVarios, limpar, lista, temFiltro } = useFiltros({ de: padrao.de, ate: padrao.ate });
   const periodo = { de: valores.de, ate: valores.ate };
   /**
    * Sem filtro de FLUXO: esta tela é a da pesquisa pós-instalação, e o servidor
@@ -756,7 +756,7 @@ export function AnaliticoCx() {
     <div className="page rola">
       <div className="filtros">
         <span className="rotulo">Filtros</span>
-        <FiltroPeriodo de={valores.de} ate={valores.ate} onChange={(de, ate) => { definir('de', de); definir('ate', ate); }} />
+        <FiltroPeriodo de={valores.de} ate={valores.ate} onChange={(de, ate) => { definirVarios({ de, ate }); }} />
         <Filtro nome="Cidade" opcoes={opcoes.data?.cidade || []} marcados={lista('cidade')} onChange={(v) => definir('cidade', v)} />
         <span className="filtro-fixo" title="Esta tela é da pesquisa pós-instalação. Os outros fluxos do n8n ficam em Mensagens HSM.">
           <Icone nome="cadeado" tamanho={11} /> fluxo <b>cs_cx_72hrs</b>

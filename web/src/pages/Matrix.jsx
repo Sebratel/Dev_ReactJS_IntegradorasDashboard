@@ -19,7 +19,7 @@ import { dataBr, horaBr, hmsSeg, int, pct } from '../format';
  */
 export function Matrix() {
   const padrao = usePeriodoPadrao();
-  const { valores, definir, limpar, lista, temFiltro } = useFiltros({
+  const { valores, definir, definirVarios, limpar, lista, temFiltro } = useFiltros({
     de: padrao.de,
     ate: padrao.ate,
     granularidade: 'dia',
@@ -43,7 +43,7 @@ export function Matrix() {
     <div className="page">
       <div className="filtros">
         <span className="rotulo">Filtros</span>
-        <FiltroPeriodo de={valores.de} ate={valores.ate} onChange={(de, ate) => { definir('de', de); definir('ate', ate); }} />
+        <FiltroPeriodo de={valores.de} ate={valores.ate} onChange={(de, ate) => { definirVarios({ de, ate }); }} />
         <Filtro nome="Ativo/Receptivo" opcoes={opcoes.data?.ativoReceptivo || []} marcados={lista('ativoReceptivo')} onChange={(v) => definir('ativoReceptivo', v)} />
         <Filtro nome="Status" opcoes={opcoes.data?.status || []} marcados={lista('status')} onChange={(v) => definir('status', v)} />
         <Filtro nome="Serviço" opcoes={opcoes.data?.servico || []} marcados={lista('servico')} onChange={(v) => definir('servico', v)} />

@@ -44,8 +44,16 @@ export const peloMenos = (papel, minimo) => rank(papel) >= rank(minimo);
  * liberaria duas telas distintas de uma vez.
  */
 export const TELAS = [
+  /**
+   * Capa ÚNICA do dashboard, fora dos relatórios.
+   *
+   * Eram duas — `geral-capa` e `sup-capa`, uma por relatório, como no Power BI.
+   * Viraram uma em 08/09/2026 por decisão do usuário: os três relatórios olham o
+   * mesmo assunto (atendimento ao cliente) em canais diferentes, e duas capas
+   * repetiam objetivo, fontes e contato.
+   */
+  { id: 'capa', relatorio: 'Capa', curto: 'Capa', label: 'Capa', rota: '/capa', descricao: 'Objetivo do dashboard, canais atendidos, estado das bases e como ler os indicadores' },
   // GERAL — Relatórios Detalhados Integradoras
-  { id: 'geral-capa', relatorio: 'Geral', curto: 'Capa', label: 'Geral · Capa', rota: '/geral', descricao: 'Objetivo, histórico de revisões e regras dos quartis' },
   { id: 'geral-matrix', relatorio: 'Geral', curto: 'Matrix', label: 'Geral · Matrix', rota: '/geral/matrix', descricao: 'Indicadores do MatrixGO: atendimentos, TMA e TME medianos, faixas de espera' },
   { id: 'geral-csat-matrix', relatorio: 'Geral', curto: 'CSAT Matrix', label: 'Geral · CSAT Matrix', rota: '/geral/csat-matrix', descricao: 'Pesquisa de satisfação e adesão do MatrixGO' },
   { id: 'geral-native', relatorio: 'Geral', curto: 'Native', label: 'Geral · Native', rota: '/geral/native', descricao: 'Indicadores do Native Infinity: atendimentos, TMA, TME e perdidas' },
@@ -53,7 +61,6 @@ export const TELAS = [
   { id: 'geral-produtividade', relatorio: 'Geral', curto: 'Produtiv.', label: 'Geral · Produtividade', rota: '/geral/produtividade', descricao: 'Desempenho individual por agente nas três frentes (dado sensível)' },
   { id: 'geral-quartis', relatorio: 'Geral', curto: 'Quartis', label: 'Geral · Quartis', rota: '/geral/quartis', descricao: 'Nota final e classificação por quartil de cada colaborador (dado sensível)' },
   // SUP — Indicadores Suporte
-  { id: 'sup-capa', relatorio: 'Suporte', curto: 'Capa', label: 'Suporte · Capa', rota: '/sup', descricao: 'Objetivo e programação de atualizações do relatório de suporte' },
   { id: 'sup-matrix', relatorio: 'Suporte', curto: 'Matrix', label: 'Suporte · Matrix', rota: '/sup/matrix', descricao: 'Nível de serviço do MatrixGO por checkpoint do dia' },
   { id: 'sup-native', relatorio: 'Suporte', curto: 'Native', label: 'Suporte · Native', rota: '/sup/native', descricao: 'Nível de serviço do Native por checkpoint do dia' },
   { id: 'sup-executivo', relatorio: 'Suporte', curto: 'Executivo', label: 'Suporte · Report Executivo', rota: '/sup/executivo', descricao: 'Acompanhamento, entrantes e eventos massivos consolidados' },
