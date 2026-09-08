@@ -33,6 +33,22 @@ const CX = 'DB_Applicattion.matrix_hsm_cx_post_installation';
 /** Status do HSM que representam entrega bem-sucedida; o resto é falha. */
 const HSM_OK = ['Lida', 'Entregue', 'Enviada'];
 
+/**
+ * O fluxo do n8n que É a pesquisa pós-instalação.
+ *
+ * A tabela guarda quatro automações diferentes, e só esta é CX. Medido em
+ * 08/09/2026: `cs_cx_72hrs` são 1.430 disparos e `Billing_Collection_6Days_Overdue`
+ * outros 3.975 — a cobrança é quase três vezes o CX. Enquanto a tela de CX olhava
+ * a tabela inteira, todo indicador dela descrevia sobretudo a cobrança, e a
+ * "cobertura por cidade" era dominada por 3.978 linhas sem cidade, que são
+ * justamente as de cobrança (só o fluxo de CX preenche cidade e bairro).
+ *
+ * Por isso a tela de CX passa a fixar este fluxo, e a visão geral dos quatro
+ * mudou para a tela de HSM — que é onde a pergunta "quanto a gente disparou"
+ * pertence. Decisão do usuário em 08/09/2026.
+ */
+const FLUXO_CX = 'cs_cx_72hrs';
+
 const listaDe = (v) => (Array.isArray(v) ? v : v ? String(v).split(',') : []).map((s) => s.trim()).filter(Boolean);
 
 function filtroIn(coluna, valores, where, params) {
@@ -441,9 +457,9 @@ export async function detalhamentoFalhasHsm(filtros, limite = 300) {
  * massiva). Por isso o fluxo é um filtro da tela, e não uma suposição.
  */
 export async function cx(filtros) {
-  const where = ['data_hora_disparo >= ?', 'data_hora_disparo < ?'];
-  const params = [filtros.de, filtros.ate];
-  filtroIn('n8n_flow', filtros.fluxo, where, params);
+  // fluxo FIXO: esta tela é a da pesquisa pós-instalação, não a dos disparos
+  const where = ['data_hora_disparo >= ?', 'data_hora_disparo < ?', 'n8n_flow = ?'];
+  const params = [filtros.de, filtros.ate, FLUXO_CX];
   filtroIn('cliente_cidade', filtros.cidade, where, params);
   const onde = where.join(' AND ');
 
@@ -619,9 +635,8 @@ async function tagsDeCx(filtros) {
  * zero) — então esse salto foi omitido em vez de copiado.
  */
 export async function cxCruzado(filtros, limite = 400) {
-  const where = ['data_hora_disparo >= ?', 'data_hora_disparo < ?'];
-  const params = [filtros.de, filtros.ate];
-  filtroIn('n8n_flow', filtros.fluxo, where, params);
+  const where = ['data_hora_disparo >= ?', 'data_hora_disparo < ?', 'n8n_flow = ?'];
+  const params = [filtros.de, filtros.ate, FLUXO_CX];
   filtroIn('cliente_cidade', filtros.cidade, where, params);
 
   /**
@@ -757,44 +772,78 @@ export async function cxCruzado(filtros, limite = 400) {
       mostrando: Math.min(itens.length, limite),
       truncado: itens.length > limite,
     },
-    /** Motivos de erro agrupados pelo código, para a tela listar e filtrar. */
+    /**
+     * Motivos de erro agrupados pelo par código HTTP + `cod_error` (ver
+     * `separarErro`), e não pelo texto: o n8n mudou o formato da mensagem no meio
+     * do histórico, e agrupar pelo texto parte o mesmo erro em dois.
+     */
     erros: (() => {
       const grupos = new Map();
       for (const i of itens) {
         if (i.gerado) continue;
-        const chave = i.motivoErro || '(sem retorno)';
-        if (!grupos.has(chave)) grupos.set(chave, { chave, n: 0, codigos: new Set() });
+        const chave = i.chaveErro || 'sem-codigo';
+        if (!grupos.has(chave)) {
+          grupos.set(chave, { id: chave, chave: i.motivoErro || '(sem retorno)', n: 0, codigos: new Set() });
+        }
         const g = grupos.get(chave);
         g.n += 1;
         if (i.codigoErro) g.codigos.add(i.codigoErro);
       }
       return [...grupos.values()]
-        .map((g) => ({ chave: g.chave, n: g.n, codigos: [...g.codigos] }))
+        .map((g) => ({ id: g.id, chave: g.chave, n: g.n, codigos: [...g.codigos] }))
         .sort((a, b) => b.n - a.n);
     })(),
   };
 }
 
 /**
- * Separa o código HTTP do corpo do erro na mensagem de retorno.
+ * Separa o código e o motivo do erro na mensagem de retorno do disparo.
  *
- * As falhas vêm como `"400 - {\"error\":...}"`, e agrupar pela mensagem inteira
- * criaria um grupo por cliente (o corpo traz o número dele). O código sozinho
- * agrupa de verdade.
+ * Duas coisas o dado real exigiu:
+ *
+ * 1. As falhas vêm como `400 - {"cod_error":13,"msg":"Contato possui atendimento
+ *    ativo"}`. Agrupar pela mensagem inteira criaria um grupo por cliente,
+ *    porque o corpo às vezes traz o número dele.
+ * 2. O MESMO erro aparece em DUAS grafias, porque o n8n mudou o formato em algum
+ *    momento: `400 - "{\"cod_error\":13,...}"` e `[400 - cod_error 13] Contato
+ *    possui atendimento ativo`. Agrupando pelo texto, o mesmo problema aparecia
+ *    duas vezes com contagens partidas (105 e 9). Por isso a chave de
+ *    agrupamento é o par código HTTP + `cod_error`, que sobrevive às duas.
  */
 function separarErro(mensagem, sucesso) {
-  if (sucesso) return { codigoErro: null, motivoErro: null };
+  if (sucesso) return { codigoErro: null, motivoErro: null, chaveErro: null };
   const texto = String(mensagem || '').trim();
-  if (!texto) return { codigoErro: null, motivoErro: '(sem retorno)' };
-  const m = /^\s*(\d{3})\s*[-:]?\s*(.*)$/s.exec(texto);
-  if (m) return { codigoErro: m[1], motivoErro: (m[2] || '').slice(0, 160) || '(sem detalhe)' };
-  return { codigoErro: null, motivoErro: texto.slice(0, 160) };
+  if (!texto) return { codigoErro: null, motivoErro: '(sem retorno)', chaveErro: 'sem-retorno' };
+
+  /**
+   * Os regex toleram a barra de escape porque o JSON chega ESCAPADO no campo:
+   * o texto literal é `400 - "{\"cod_error\":13,\"msg\":\"...\"}"`, com as
+   * barras fazendo parte do valor. Sem o `\\?` a busca por `"cod_error"` não
+   * casava e todo erro caía no grupo genérico do código HTTP.
+   */
+  const http = /(\d{3})/.exec(texto)?.[1] || null;
+  /**
+   * Os dois-pontos são OPCIONAIS porque as duas grafias escrevem diferente: o
+   * JSON usa `\"cod_error\":13` e a versão nova usa `[400 - cod_error 13]`, com
+   * espaço. Exigindo `:`, a segunda caía no grupo genérico `400` e o mesmo erro
+   * ficava partido em dois — 124 numa linha e 9 na outra.
+   */
+  const cod = /cod_error\\?"?\s*:?\s*(\d+)/i.exec(texto)?.[1] || null;
+  // a frase legível está em `msg`, em `message`, ou depois do `]` na grafia nova
+  const msg = /\\?"(?:msg|message)\\?"\s*:\s*\\?"([^"\\]+)/i.exec(texto)?.[1]
+    || /\]\s*(.+)$/s.exec(texto)?.[1]
+    || texto.replace(/^\s*\d{3}\s*[-:]?\s*/, '');
+
+  return {
+    codigoErro: http,
+    motivoErro: String(msg).replace(/\\"/g, '"').replace(/[{}"\\]+$/, '').trim().slice(0, 160) || '(sem detalhe)',
+    chaveErro: [http, cod].filter(Boolean).join('/') || 'sem-codigo',
+  };
 }
 
 export async function detalhamentoCx(filtros, limite = 500) {
-  const where = ['data_hora_disparo >= ?', 'data_hora_disparo < ?'];
-  const params = [filtros.de, filtros.ate];
-  filtroIn('n8n_flow', filtros.fluxo, where, params);
+  const where = ['data_hora_disparo >= ?', 'data_hora_disparo < ?', 'n8n_flow = ?'];
+  const params = [filtros.de, filtros.ate, FLUXO_CX];
   filtroIn('cliente_cidade', filtros.cidade, where, params);
   const { rows } = await query(
     `select data_hora_disparo, prot_atendimento, cliente_nome, cliente_cidade, cliente_bairro,
@@ -804,6 +853,194 @@ export async function detalhamentoCx(filtros, limite = 500) {
     [...params, limite],
   );
   return rows;
+}
+
+// --------------------------------------------------- DISPAROS (n8n × Meta)
+
+/**
+ * As duas metades do envio de HSM, que vivem em tabelas diferentes:
+ *
+ *   DISPARO — `DB_Applicattion.matrix_hsm_cx_post_installation`, alimentada pelo
+ *   n8n. Responde "a automação conseguiu pedir o envio?". O `status_envio` é o
+ *   retorno da API do MatrixGO na hora do disparo: 1 quando o atendimento foi
+ *   gerado, 0 quando falhou (token inválido, contato já com atendimento aberto).
+ *
+ *   META — `API_WebDeveloper.db_matrix_hsms_enviados`, que é o relatório do
+ *   MatrixGO/Meta. Responde "a mensagem chegou e foi lida?". Aqui os status são
+ *   Enviada → Entregue → Lida, mais os motivos de não entrega.
+ *
+ * São etapas em sequência, não visões alternativas do mesmo número: o n8n dispara
+ * e a Meta entrega. Um disparo com sucesso pode não ser entregue, e a Meta reporta
+ * MUITO mais do que o n8n dispara — em 30 dias, 24.663 contra 5.417, porque ela
+ * cobre todo HSM da conta (inclusive o que sai da mão de um atendente) e o n8n só
+ * as automações dele.
+ *
+ * A reconciliação liga as duas por `protocol_number`. Medido em 08/09/2026: 63%
+ * dos disparos aparecem no relatório da Meta, e no fluxo de CX a taxa é de 82,6%.
+ * O que não casa não é necessariamente perda — pode ser disparo que falhou antes
+ * de gerar mensagem, ou protocolo que a Meta registrou sob outro número.
+ */
+export async function disparos(filtros) {
+  const ondeN8n = ['data_hora_disparo >= ?', 'data_hora_disparo < ?'];
+  const pN8n = [filtros.de, filtros.ate];
+  filtroIn('n8n_flow', filtros.fluxo, ondeN8n, pN8n);
+  const n8n = ondeN8n.join(' AND ');
+
+  /**
+   * A RECONCILIAÇÃO É FEITA EM MEMÓRIA, e não com um join no banco.
+   *
+   * Nenhuma das duas tabelas tem índice em `protocol_number` — conferido com
+   * `show index`: a de HSM indexa `report_date`, `message_id` e
+   * `interaction_id`, e a do n8n só a chave primária. Sem índice, o
+   * `left join ... on h.protocol_number = c.prot_atendimento` é uma varredura
+   * por linha e estoura o `max_statement_time` do servidor; foi o que aconteceu
+   * na primeira versão desta função.
+   *
+   * As duas consultas separadas custam 507 ms no total (145 ms dos disparos,
+   * 352 ms dos HSMs do período, 10 ms de junção) e são O(n+m). É a mesma escolha
+   * de `cxCruzado`, pelo mesmo motivo — vale como regra para estas tabelas.
+   */
+  const [porFluxo, porDia, erros, total, disparosCrus, hsmsDoPeriodo] = await Promise.all([
+    query(`select n8n_flow fluxo, count(*) disparos,
+                  sum(case when status_envio = 1 then 1 else 0 end) sucesso,
+                  count(distinct nullif(cliente_cidade, '')) cidades,
+                  min(data_hora_disparo) primeiro, max(data_hora_disparo) ultimo
+             from ${CX} where ${n8n} group by fluxo order by disparos desc`, pN8n),
+    query(`select date(data_hora_disparo) dia, count(*) disparos,
+                  sum(case when status_envio = 1 then 1 else 0 end) sucesso
+             from ${CX} where ${n8n} group by dia order by dia`, pN8n),
+    /**
+     * 240 caracteres, e não 80: o retorno é um JSON escapado
+     * (`400 - "{\"cod_error\":13,\"msg\":\"...\"}"`) e cortar em 80 decepava o
+     * corpo ANTES do campo `msg`. O agrupamento por código passava a ver apenas
+     * `400`, sem o `cod_error`, e a frase legível saía como `}`. A coluna é
+     * varchar(500), então 240 cobre o retorno inteiro dos erros conhecidos.
+     */
+    query(`select left(coalesce(nullif(mensagem_envio, ''), '(sem retorno)'), 240) motivo,
+                  n8n_flow fluxo, count(*) n
+             from ${CX} where ${n8n} and status_envio <> 1
+            group by motivo, fluxo order by n desc limit 30`, pN8n),
+    query(`select count(*) disparos, sum(case when status_envio = 1 then 1 else 0 end) sucesso
+             from ${CX} where ${n8n}`, pN8n),
+    query(`select n8n_flow fluxo, prot_atendimento protocolo from ${CX} where ${n8n}`, pN8n),
+    /**
+     * A janela do lado da Meta é a MESMA do disparo, mais uma folga de dois dias:
+     * o relatório dela é diário e a mensagem disparada às 23h de um dia aparece no
+     * `report_date` do dia seguinte. Sem a folga, os disparos do fim do período
+     * apareceriam como "não confirmados pela Meta" por questão de fuso do
+     * relatório, não por falha de entrega.
+     */
+    query(`select protocol_number protocolo, status, template_name template, category categoria
+             from ${HSM}
+            where report_date >= ? and report_date <= date_add(?, interval 2 day)
+              and protocol_number is not null and protocol_number <> ''`,
+    [soData(filtros.de), soData(filtros.ateInclusivo)]),
+  ]);
+
+  const t = total.rows[0] || {};
+  const disparosTotal = num(t.disparos) || 0;
+  const sucesso = num(t.sucesso) || 0;
+  const taxa = (a, b) => (b ? a / b : null);
+
+  // protocolo -> mensagens que a Meta registrou para ele
+  const metaPorProtocolo = new Map();
+  for (const h of hsmsDoPeriodo.rows) {
+    const p = String(h.protocolo);
+    if (!metaPorProtocolo.has(p)) metaPorProtocolo.set(p, []);
+    metaPorProtocolo.get(p).push(h);
+  }
+
+  const recPorFluxo = new Map();
+  const templatesPorFluxo = new Map();
+  for (const d of disparosCrus.rows) {
+    const fluxo = d.fluxo || '(sem fluxo)';
+    if (!recPorFluxo.has(fluxo)) recPorFluxo.set(fluxo, { na_meta: 0, entregues: 0, lidas: 0 });
+    const r = recPorFluxo.get(fluxo);
+    const mensagens = metaPorProtocolo.get(String(d.protocolo || ''));
+    if (!mensagens?.length) continue;
+    r.na_meta += 1;
+    if (mensagens.some((m) => m.status === 'Lida')) r.lidas += 1;
+    if (mensagens.some((m) => m.status === 'Lida' || m.status === 'Entregue')) r.entregues += 1;
+    for (const m of mensagens) {
+      const chave = `${fluxo}|${m.template}|${m.categoria || ''}`;
+      templatesPorFluxo.set(chave, (templatesPorFluxo.get(chave) || 0) + 1);
+    }
+  }
+
+  return {
+    kpis: {
+      disparos: disparosTotal,
+      sucesso,
+      erros: disparosTotal - sucesso,
+      taxaSucesso: taxa(sucesso, disparosTotal),
+      fluxos: porFluxo.rows.length,
+      naMeta: [...recPorFluxo.values()].reduce((s, r) => s + r.na_meta, 0),
+    },
+    porFluxo: porFluxo.rows.map((r) => {
+      const rec = recPorFluxo.get(r.fluxo) || {};
+      const d = num(r.disparos);
+      return {
+        chave: r.fluxo || '(sem fluxo)',
+        disparos: d,
+        sucesso: num(r.sucesso),
+        erros: d - num(r.sucesso),
+        taxaSucesso: taxa(num(r.sucesso), d),
+        cidades: num(r.cidades),
+        naMeta: rec.na_meta || 0,
+        entregues: rec.entregues || 0,
+        lidas: rec.lidas || 0,
+        taxaReconciliacao: taxa(rec.na_meta || 0, d),
+        ehCx: r.fluxo === FLUXO_CX,
+        primeiro: r.primeiro,
+        ultimo: r.ultimo,
+      };
+    }),
+    porDia: porDia.rows.map((r) => ({
+      periodo: soData(r.dia), label: rotuloDia(soData(r.dia)),
+      disparos: num(r.disparos), sucesso: num(r.sucesso),
+      erros: num(r.disparos) - num(r.sucesso),
+    })),
+    /**
+     * Erros agrupados pelo par código HTTP + `cod_error`, e não pela mensagem.
+     *
+     * A consulta agrupa por (motivo, fluxo), então o mesmo erro chega repetido —
+     * uma vez por fluxo, e às vezes duas no mesmo fluxo por causa da mudança de
+     * formato da mensagem. Aqui isso colapsa: um item por problema real, com a
+     * lista de fluxos em que ele apareceu.
+     */
+    erros: (() => {
+      const grupos = new Map();
+      for (const r of erros.rows) {
+        const info = separarErro(r.motivo, false);
+        const chave = info.chaveErro;
+        if (!grupos.has(chave)) {
+          grupos.set(chave, { id: chave, chave: info.motivoErro, codigoErro: info.codigoErro, n: 0, fluxos: new Set() });
+        }
+        const g = grupos.get(chave);
+        g.n += num(r.n);
+        if (r.fluxo) g.fluxos.add(r.fluxo);
+      }
+      return [...grupos.values()]
+        .map((g) => ({ ...g, fluxos: [...g.fluxos], pct: taxa(g.n, disparosTotal - sucesso) }))
+        .sort((a, b) => b.n - a.n);
+    })(),
+    /**
+     * Qual template da Meta cada automação usa — o mapa entre os dois relatórios.
+     *
+     * Um disparo pode casar com mais de um template porque o mesmo protocolo
+     * recebe outras mensagens (uma segunda via, um carnê) além da do fluxo. Por
+     * isso a lista é ordenada por volume: o primeiro de cada fluxo é o template
+     * daquela automação, os demais são o que mais chegou àquele cliente.
+     */
+    templates: [...templatesPorFluxo.entries()]
+      .map(([chave, n]) => {
+        const [fluxo, template, categoria] = chave.split('|');
+        return { fluxo, chave: template, categoria: categoria || null, n };
+      })
+      .sort((a, b) => b.n - a.n)
+      .slice(0, 40),
+    fluxoCx: FLUXO_CX,
+  };
 }
 
 // ------------------------------------------------------------------- filtros
@@ -816,7 +1053,12 @@ export async function filtrosDisponiveis(filtros) {
     query(`select distinct template_name v from ${HSM} where report_date >= ? and report_date <= ? and template_name <> '' order by v`, dias),
     query(`select distinct category v from ${HSM} where report_date >= ? and report_date <= ? and category <> '' order by v`, dias),
     query(`select distinct n8n_flow v from ${CX} where data_hora_disparo >= ? and data_hora_disparo < ? and n8n_flow <> '' order by v`, [filtros.de, filtros.ate]),
-    query(`select distinct cliente_cidade v from ${CX} where data_hora_disparo >= ? and data_hora_disparo < ? and cliente_cidade <> '' order by v`, [filtros.de, filtros.ate]),
+    // cidade só do fluxo de CX: é a única tela que filtra por cidade, e os outros
+    // fluxos não preenchem o campo — a lista viria com as opções de um fluxo que
+    // aquela tela não mostra
+    query(`select distinct cliente_cidade v from ${CX}
+            where data_hora_disparo >= ? and data_hora_disparo < ? and cliente_cidade <> '' and n8n_flow = ?
+            order by v`, [filtros.de, filtros.ate, FLUXO_CX]),
   ]);
   return {
     status: status.rows.map((r) => r.v),

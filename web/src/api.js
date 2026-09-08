@@ -206,6 +206,14 @@ export function useAnaliticoCxCruzado(filtros) {
 }
 
 /**
+ * Disparos do n8n com a reconciliação contra o relatório da Meta. Vive na tela
+ * de HSM: é a outra metade do funil de envio.
+ */
+export function useAnaliticoDisparos(filtros) {
+  return useQuery({ queryKey: ['analiticos', 'disparos', filtros], queryFn: () => apiGet('/analiticos/disparos', filtros) });
+}
+
+/**
  * Mensagens de um motivo de não entrega. `ativo` mantém a consulta desligada
  * até alguém abrir um motivo — são centenas de linhas que ninguém pediu ainda.
  */

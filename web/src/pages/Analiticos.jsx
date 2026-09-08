@@ -1,12 +1,13 @@
 import { useRef, useState } from 'react';
 import {
-  useAnaliticoAtendimento, useAnaliticoCx, useAnaliticoCxCruzado, useAnaliticoHsm,
-  useAnaliticoHsmFalhas, useAnaliticosFiltros,
+  useAnaliticoAtendimento, useAnaliticoCx, useAnaliticoCxCruzado, useAnaliticoDisparos,
+  useAnaliticoHsm, useAnaliticoHsmFalhas, useAnaliticosFiltros,
 } from '../api';
 import { CORES, ComboChart } from '../components/charts';
 import { useAlturaNoCromo } from '../components/cromo';
 import { Filtro, FiltroPeriodo, usePeriodoPadrao, useFiltros } from '../components/SlicerBar';
 import { Tabela } from '../components/tables';
+import { Icone } from '../components/Icone';
 import { Erro, Kpi, Legenda, Loading, Vazio, Visual } from '../components/ui';
 import { BotaoInsights } from '../components/InsightsIA';
 import {
@@ -383,8 +384,12 @@ export function AnaliticoHsm() {
   const consulta = useAnaliticoHsm(filtros);
   // só busca o detalhamento quando alguém abre um motivo
   const falhas = useAnaliticoHsmFalhas({ ...filtros, motivo: motivoAberto }, !!motivoAberto);
+  // os disparos do n8n: a outra metade do funil, que não depende dos filtros de template
+  const disp = useAnaliticoDisparos({ ...periodo, fluxo: lista('fluxo') });
   const d = consulta.data;
   const k = d?.kpis || {};
+  const dp = disp.data;
+  const dk = dp?.kpis || {};
 
   const refKpis = useRef(null);
   useAlturaNoCromo(refKpis, '--h-kpis');
@@ -396,6 +401,8 @@ export function AnaliticoHsm() {
         <FiltroPeriodo de={valores.de} ate={valores.ate} onChange={(de, ate) => { definir('de', de); definir('ate', ate); }} />
         <Filtro nome="Template" opcoes={opcoes.data?.template || []} marcados={lista('template')} onChange={(v) => definir('template', v)} />
         <Filtro nome="Categoria" opcoes={opcoes.data?.categoria || []} marcados={lista('categoria')} onChange={(v) => definir('categoria', v)} />
+        {/* o fluxo só recorta a seção do n8n: a Meta não conhece esse conceito */}
+        <Filtro nome="Fluxo n8n" opcoes={opcoes.data?.fluxo || []} marcados={lista('fluxo')} onChange={(v) => definir('fluxo', v)} />
         {temFiltro && <button type="button" className="limpar" onClick={limpar}>Limpar filtros</button>}
       </div>
 
@@ -573,6 +580,131 @@ export function AnaliticoHsm() {
           )}
         </Card>
       </Secao>
+
+      {/* ---------------- os disparos do n8n ---------------- */}
+      <Secao
+        titulo="Disparos automáticos · n8n"
+        sub="A outra metade do funil. As seções acima vêm do relatório da META (o que ela entregou e o cliente leu); esta vem da tabela do n8n no MariaDB (o que a automação conseguiu pedir). São etapas em sequência, não o mesmo número visto de dois jeitos."
+      >
+        <Aviso tom="neutro">
+          A Meta reporta <b>todo</b> HSM da conta — inclusive o que sai da mão de um atendente — e o
+          n8n só as automações dele. No período, <b>{int(k.enviadas ?? 0)}</b> mensagens na Meta contra
+          {' '}<b>{int(dk.disparos ?? 0)}</b> disparos do n8n. Por isso os totais das duas seções não
+          fecham entre si, e não deveriam.
+        </Aviso>
+
+        {disp.isLoading ? <Loading texto="Consultando os disparos do n8n…" />
+          : disp.isError ? <Erro erro={disp.error} />
+          : !dp ? <Vazio />
+          : (
+            <>
+              <FaixaKpis
+                itens={[
+                  { label: 'Disparos (n8n)', value: int(dk.disparos ?? 0), desc: `${dk.fluxos ?? 0} automação(ões) no período` },
+                  { label: 'Pedido aceito', value: int(dk.sucesso ?? 0), desc: dk.taxaSucesso === null || dk.taxaSucesso === undefined ? '—' : `${pct(dk.taxaSucesso, 1)} dos disparos` },
+                  { label: 'Erro no disparo', value: int(dk.erros ?? 0), desc: 'Token, contato já em atendimento…' },
+                  {
+                    label: 'Confirmados pela Meta',
+                    value: int(dk.naMeta ?? 0),
+                    desc: dk.disparos ? `${pct(dk.naMeta / dk.disparos, 1)} apareceram no relatório` : '—',
+                  },
+                ]}
+              />
+
+              <Painel
+                titulo="Por automação"
+                sub="Cada fluxo do n8n, o que ele pediu e o que a Meta confirmou"
+                className="v-auto"
+                consulta={disp}
+                dados={dp.porFluxo}
+                ordemInicial={{ key: 'disparos', dir: 'desc' }}
+                colunas={[
+                  {
+                    key: 'chave',
+                    titulo: 'Fluxo n8n',
+                    align: 'left',
+                    largura: 250,
+                    // o fluxo de CX ganha destaque: é o que tem tela própria
+                    corFundo: (r) => (r.ehCx ? CORES.fundoPositivo : null),
+                  },
+                  colBarra('disparos', 'Disparos'),
+                  { key: 'sucesso', titulo: 'Aceitos', fmt: int },
+                  {
+                    key: 'taxaSucesso',
+                    titulo: '% aceite',
+                    fmt: (v) => (v === null ? '—' : pct(v, 1)),
+                    corFundo: (r) => (r.taxaSucesso === null ? null : r.taxaSucesso >= 0.85 ? CORES.fundoPositivo : CORES.fundoAtencao),
+                  },
+                  { key: 'naMeta', titulo: 'Na Meta', fmt: (v) => (v ? int(v) : '—') },
+                  { key: 'taxaReconciliacao', titulo: '% na Meta', fmt: (v) => (v === null || v === 0 ? '—' : pct(v, 1)) },
+                  { key: 'entregues', titulo: 'Entregues', fmt: (v) => (v ? int(v) : '—') },
+                  { key: 'lidas', titulo: 'Lidas', fmt: (v) => (v ? int(v) : '—') },
+                  { key: 'cidades', titulo: 'Cidades', fmt: (v) => (v ? int(v) : '—') },
+                ]}
+              />
+
+              <div className="grid linha-dupla">
+                <Card
+                  titulo="Disparos por dia"
+                  sub="Aceitos e recusados no momento do pedido"
+                  consulta={disp}
+                  vazio={!dp.porDia?.length}
+                >
+                  <Legenda itens={[{ label: 'Aceitos', cor: CORES.gold }, { label: 'Erro', cor: CORES.critico }]} />
+                  {/* o card é de altura automática, então a área do gráfico
+                      precisa de uma altura própria — o AutoSizer mediria zero */}
+                  <div style={{ height: 210 }}>
+                    <ComboChart
+                      data={dp.porDia}
+                      barras={[
+                        { key: 'sucesso', nome: 'Aceitos', cor: CORES.gold },
+                        { key: 'erros', nome: 'Erro', cor: CORES.critico },
+                      ]}
+                    />
+                  </div>
+                </Card>
+
+                <Card
+                  titulo="Erros do disparo"
+                  sub="Retorno da API na hora do pedido, agrupado pelo código"
+                  consulta={disp}
+                  vazio={!dp.erros?.length}
+                >
+                  <ListaBarras
+                    itens={dp.erros.map((e) => ({
+                      ...e,
+                      label: `${e.codigoErro ? `[${e.codigoErro}] ` : ''}${e.chave}`
+                        + (e.fluxos?.length > 1 ? ` · ${e.fluxos.length} fluxos` : ''),
+                    }))}
+                    max={8}
+                    corDe={() => CORES.critico}
+                  />
+                </Card>
+              </div>
+
+              <Painel
+                titulo="Qual template cada automação usa"
+                sub="O mapa entre os dois relatórios. Um fluxo pode aparecer com mais de um template porque o mesmo protocolo recebe outras mensagens além da dele — o primeiro de cada fluxo é o template da automação."
+                className="v-auto"
+                consulta={disp}
+                dados={dp.templates}
+                ordemInicial={{ key: 'n', dir: 'desc' }}
+                colunas={[
+                  {
+                    key: 'fluxo',
+                    titulo: 'Fluxo n8n',
+                    align: 'left',
+                    largura: 230,
+                    corFundo: (r) => (r.fluxo === dp.fluxoCx ? CORES.fundoPositivo : null),
+                  },
+                  { key: 'chave', titulo: 'Template na Meta', align: 'left', largura: 260 },
+                  { key: 'categoria', titulo: 'Categoria', align: 'left', fmt: (v) => v || '—' },
+                  colBarra('n', 'Mensagens'),
+                ]}
+              />
+            </>
+          )}
+      </Secao>
     </div>
   );
 }
@@ -583,7 +715,13 @@ export function AnaliticoCx() {
   const padrao = usePeriodoPadrao();
   const { valores, definir, limpar, lista, temFiltro } = useFiltros({ de: padrao.de, ate: padrao.ate });
   const periodo = { de: valores.de, ate: valores.ate };
-  const filtros = { ...periodo, fluxo: lista('fluxo'), cidade: lista('cidade') };
+  /**
+   * Sem filtro de FLUXO: esta tela é a da pesquisa pós-instalação, e o servidor
+   * fixa `cs_cx_72hrs`. O filtro existia e deixava a tela descrever sobretudo a
+   * cobrança — três quartos dos disparos da tabela. A visão dos quatro fluxos
+   * mudou para a tela de Mensagens HSM.
+   */
+  const filtros = { ...periodo, cidade: lista('cidade') };
 
   // filtros locais da lista de envios, como na app de origem
   const [busca, setBusca] = useState('');
@@ -619,8 +757,10 @@ export function AnaliticoCx() {
       <div className="filtros">
         <span className="rotulo">Filtros</span>
         <FiltroPeriodo de={valores.de} ate={valores.ate} onChange={(de, ate) => { definir('de', de); definir('ate', ate); }} />
-        <Filtro nome="Fluxo" opcoes={opcoes.data?.fluxo || []} marcados={lista('fluxo')} onChange={(v) => definir('fluxo', v)} />
         <Filtro nome="Cidade" opcoes={opcoes.data?.cidade || []} marcados={lista('cidade')} onChange={(v) => definir('cidade', v)} />
+        <span className="filtro-fixo" title="Esta tela é da pesquisa pós-instalação. Os outros fluxos do n8n ficam em Mensagens HSM.">
+          <Icone nome="cadeado" tamanho={11} /> fluxo <b>cs_cx_72hrs</b>
+        </span>
         {temFiltro && <button type="button" className="limpar" onClick={limpar}>Limpar filtros</button>}
       </div>
 
@@ -644,9 +784,10 @@ export function AnaliticoCx() {
       />
 
       <Aviso tom="neutro">
-        A pesquisa é medida pelas tags <code>CS_CX_72HRS_OK</code> e <code>CS_CX_72HRS_NOK</code> do
-        atendimento — quem responde gera um atendimento marcado no MatrixGO. Por isso o CX Score não
-        vem da tabela de disparos, e sim do cruzamento com o analítico de atendimento.
+        Só o fluxo <b>cs_cx_72hrs</b> entra nesta tela — os outros três do n8n (cobrança, massiva e
+        pix) estão em <b>Mensagens HSM</b>. A pesquisa é medida pelas tags <code>CS_CX_72HRS_OK</code>
+        {' '}e <code>CS_CX_72HRS_NOK</code> do atendimento: quem responde gera um atendimento marcado
+        no MatrixGO, e é daí que sai o CX Score.
       </Aviso>
 
       <Visual
@@ -799,7 +940,7 @@ export function AnaliticoCx() {
                   <div className="an-barras">
                     {cz.erros.map((e) => (
                       <div
-                        key={e.chave}
+                        key={e.id}
                         className={`an-barra an-clicavel${erroAberto === e.chave ? ' an-selecionado' : ''}`}
                         onClick={() => setErroAberto(erroAberto === e.chave ? null : e.chave)}
                       >

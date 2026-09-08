@@ -141,7 +141,14 @@ export function ListaBarras({ itens, max = 12, corDe = null, mostrarPct = true, 
       {visiveis.map((i, idx) => {
         const cor = i.semDado ? CORES.grid : (corDe ? corDe(i, idx) : SERIE[idx % SERIE.length]);
         return (
-          <div key={i.chave} className="an-barra">
+          /**
+           * `i.id ?? i.chave`, e não só `i.chave`: a chave é também o rótulo
+           * mostrado, e rótulo repetido é normal em algumas listas — o mesmo
+           * motivo de erro do n8n aparece em fluxos diferentes. O React avisava
+           * de chaves duplicadas e podia embaralhar as linhas ao reordenar.
+           * Quem tem ambiguidade manda um `id` próprio.
+           */
+          <div key={i.id ?? i.chave} className="an-barra">
             <div className="an-barra-lbl" title={i.label && i.label !== i.chave ? `${i.label} — tag: ${i.chave}` : i.chave}>
               {i.label || i.chave}
             </div>

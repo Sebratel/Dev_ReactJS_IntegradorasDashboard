@@ -91,6 +91,8 @@ geral.get('/analiticos/cx/detalhamento', ...rota('analiticos/cx/detalhamento', (
 // o cruzamento disparo -> atendimento -> resposta, que sustenta o CX Score
 geral.get('/analiticos/cx/cruzado', ...rota('analiticos/cx/cruzado', (req) => analiticos.cxCruzado(filtrosDaQuery(req), Number(req.query.limite) || 400), { tela: 'analiticos-cx' }));
 geral.get('/analiticos/hsm/falhas', ...rota('analiticos/hsm/falhas', (req) => analiticos.detalhamentoFalhasHsm(filtrosDaQuery(req), Number(req.query.limite) || 300), { tela: 'analiticos-hsm' }));
+// os disparos do n8n e a reconciliação com o relatório da Meta — vive na tela de HSM
+geral.get('/analiticos/disparos', ...rota('analiticos/disparos', (req) => analiticos.disparos(filtrosDaQuery(req)), { tela: 'analiticos-hsm' }));
 // idem: a lista de opções serve às três telas de analíticos
 geral.get('/analiticos/filtros', ...rota('analiticos/filtros', (req) => analiticos.filtrosDisponiveis(filtrosDaQuery(req))));
 
