@@ -200,6 +200,23 @@ export function useAnaliticoCxDetalhe(filtros) {
   return useQuery({ queryKey: ['analiticos', 'cx', 'detalhe', filtros], queryFn: () => apiGet('/analiticos/cx/detalhamento', filtros) });
 }
 
+/** Disparo de CX cruzado com o atendimento gerado e a resposta da pesquisa. */
+export function useAnaliticoCxCruzado(filtros) {
+  return useQuery({ queryKey: ['analiticos', 'cx', 'cruzado', filtros], queryFn: () => apiGet('/analiticos/cx/cruzado', filtros) });
+}
+
+/**
+ * Mensagens de um motivo de não entrega. `ativo` mantém a consulta desligada
+ * até alguém abrir um motivo — são centenas de linhas que ninguém pediu ainda.
+ */
+export function useAnaliticoHsmFalhas(filtros, ativo) {
+  return useQuery({
+    queryKey: ['analiticos', 'hsm', 'falhas', filtros],
+    queryFn: () => apiGet('/analiticos/hsm/falhas', filtros),
+    enabled: !!ativo,
+  });
+}
+
 export function useAnaliticosFiltros(periodo) {
   return useQuery({
     queryKey: ['analiticos', 'filtros', periodo],

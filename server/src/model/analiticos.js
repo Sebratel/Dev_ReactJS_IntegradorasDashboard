@@ -1,4 +1,9 @@
 import { query } from '../db/maria.js';
+import {
+  CATEGORIAS_ISA, chavesDeTelefone, combinacaoAtendeIsa, combinacaoEhEncerramentoIsa,
+  ehTagCxNok, ehTagCxOk, ehTagCx, ehTagDeAssunto, ehTagMarketing, familiaDaTag,
+  motivoLegivel, normalizarRecorrencia, separarTags, soDigitos, tagAmigavel,
+} from './tags.js';
 
 /**
  * Relatórios analíticos que a aplicação `dev_ReactJs_DashboardUX` mostra hoje.
@@ -51,7 +56,7 @@ export async function atendimento(filtros) {
   filtroIn("case when is_receptive = 1 then 'Receptivo' else 'Ativo' end", filtros.ativoReceptivo, where, params);
   const onde = where.join(' AND ');
 
-  const [porStatus, porDia, porHora, porCanal, porFila, tempos] = await Promise.all([
+  const [porStatus, porDia, porHora, porCanal, porFila, tempos, porTipo, recorrencia, combinacoes, inativNoturno] = await Promise.all([
     query(`select status, count(*) n from ${ATENDIMENTO} where ${onde} group by status order by n desc`, params),
     query(`select report_date dia, count(*) n,
                   sum(case when status = 'Finalizado' then 1 else 0 end) finalizados
@@ -65,10 +70,52 @@ export async function atendimento(filtros) {
              from ${ATENDIMENTO} where ${onde} group by fila order by n desc limit 25`, params),
     query(`select status, count(*) n, avg(nullif(queue_duration, 0)) espera, avg(nullif(service_duration, 0)) atendimento
              from ${ATENDIMENTO} where ${onde} group by status order by n desc`, params),
+    // "Tipo" da app original: Automático / Misto / Humano / Notificação
+    query(`select coalesce(nullif(service_type, ''), '(sem tipo)') tipo, count(*) n
+             from ${ATENDIMENTO} where ${onde} group by tipo order by n desc`, params),
+    query(`select recurrence r, count(*) n from ${ATENDIMENTO}
+            where ${onde} and recurrence is not null and recurrence <> '' group by r`, params),
+    /**
+     * A consulta que alimenta CINCO visões: motivo do contato, encerramentos da
+     * ISA, campanhas de marketing, jornada no bot e a contagem de "sem tag".
+     *
+     * Agrupa as COMBINAÇÕES de tag e deixa a explosão para o Node — 30 dias são
+     * 65 mil atendimentos que colapsam em 389 linhas aqui. O `status` entra no
+     * agrupamento porque a jornada mostra o desfecho dominante de cada caminho.
+     */
+    query(`select tag, status, count(*) n from ${ATENDIMENTO}
+            where ${onde} group by tag, status`, params),
+    // insight de inatividade noturna: 0h–6h, que o gráfico por hora não isola
+    query(`select count(*) n, avg(nullif(service_duration, 0)) media
+             from ${ATENDIMENTO}
+            where ${onde} and status = 'Finalizado por inatividade'
+              and entry_at is not null and hour(entry_at) < 7`, params),
   ]);
 
   const total = porStatus.rows.reduce((s, r) => s + num(r.n), 0);
   const de = (nome) => num(porStatus.rows.find((r) => r.status === nome)?.n) || 0;
+
+  const tags = agregarTags(combinacoes.rows, total);
+  const tipos = porTipo.rows.map((r) => ({ chave: r.tipo, n: num(r.n) }));
+  const doTipo = (nome) => num(tipos.find((t) => t.chave === nome)?.n) || 0;
+
+  // recorrência: soma as ocorrências no mesmo grupo (ver `normalizarRecorrencia`)
+  const recAgrupada = new Map();
+  for (const r of recorrencia.rows) {
+    const chave = normalizarRecorrencia(r.r);
+    if (!chave) continue;
+    recAgrupada.set(chave, (recAgrupada.get(chave) || 0) + num(r.n));
+  }
+  const porRecorrencia = [...recAgrupada.entries()]
+    .map(([chave, n]) => ({ chave, n }))
+    .sort((a, b) => b.n - a.n);
+  const totalRecorrentes = porRecorrencia.reduce((s, r) => s + r.n, 0);
+  const reincidentes = porRecorrencia
+    .filter((r) => /reincidente|rechamada/i.test(r.chave))
+    .reduce((s, r) => s + r.n, 0);
+
+  const noturno = inativNoturno.rows[0] || {};
+  const tempoInativ = tempos.rows.find((r) => r.status === 'Finalizado por inatividade');
 
   return {
     kpis: {
@@ -78,6 +125,11 @@ export async function atendimento(filtros) {
       automatico: de('Automático'),
       transferidos: de('Transferido') + de('Transferido Pendência - Fila Prioritária'),
       emPesquisa: de('Em pesquisa'),
+      // do bloco de tags e tipos
+      semTag: tags.semTag,
+      passouSuporte: tags.passouSuporte,
+      isaTotal: tags.isa.total,
+      tipoAutomatico: doTipo('Automático'),
     },
     porStatus: porStatus.rows.map((r) => ({ chave: r.status || '(sem status)', n: num(r.n) })),
     porDia: porDia.rows.map((r) => ({
@@ -88,6 +140,7 @@ export async function atendimento(filtros) {
       periodo: String(r.hora), label: `${String(r.hora).padStart(2, '0')}h`, total: num(r.n),
     })),
     porCanal: porCanal.rows.map((r) => ({ chave: `${r.channel} · ${r.sentido}`, n: num(r.n) })),
+    porTipo: tipos,
     porFila: porFila.rows.map((r) => ({
       chave: r.fila, n: num(r.n),
       esperaSeg: r.espera === null ? null : Math.round(num(r.espera)),
@@ -98,6 +151,149 @@ export async function atendimento(filtros) {
       esperaSeg: r.espera === null ? null : Math.round(num(r.espera)),
       atendimentoSeg: r.atendimento === null ? null : Math.round(num(r.atendimento)),
     })),
+
+    // ---- o que vem das tags ----
+    isa: tags.isa,
+    marketing: tags.marketing,
+    motivos: tags.motivos,
+    jornada: tags.jornada,
+    tagsPorFamilia: tags.porFamilia,
+
+    porRecorrencia,
+    recorrencia: { total: totalRecorrentes, reincidentes },
+
+    /**
+     * Efetividade automática: a fração resolvida sem gente. `Misto` é o caso em
+     * que o bot começou e um humano terminou, e fica num bloco próprio de
+     * propósito — somá-lo ao automático inflaria o indicador com atendimentos
+     * que consumiram agente.
+     */
+    efetividade: {
+      automatico: doTipo('Automático'),
+      misto: doTipo('Misto'),
+      humano: doTipo('Humano'),
+      notificacao: doTipo('Notificação'),
+      outros: total - doTipo('Automático') - doTipo('Misto') - doTipo('Humano') - doTipo('Notificação'),
+      taxa: total ? doTipo('Automático') / total : null,
+    },
+
+    /** Números que a tela transforma nas leituras de "Análise & Insights". */
+    insights: {
+      inatividadeNoturna: num(noturno.n) || 0,
+      mediaInatividadeSeg: noturno.media === null || noturno.media === undefined
+        ? (tempoInativ?.atendimento ? Math.round(num(tempoInativ.atendimento)) : null)
+        : Math.round(num(noturno.media)),
+      passouSuporte: tags.passouSuporte,
+      semTag: tags.semTag,
+      reincidentes,
+      tipoAutomatico: doTipo('Automático'),
+    },
+  };
+}
+
+/**
+ * Explode as combinações de tag nas visões da tela.
+ *
+ * Recebe as linhas de `group by tag, status` e devolve tudo o que depende de
+ * tag. Uma passagem só sobre algumas centenas de linhas — ver o cabeçalho de
+ * `tags.js` para a medição que justificou fazer assim.
+ */
+function agregarTags(linhas, total) {
+  const contar = (mapa, chave, n) => mapa.set(chave, (mapa.get(chave) || 0) + n);
+
+  const motivos = new Map();
+  const marketing = new Map();
+  const porFamilia = new Map();
+  const isaPorCategoria = new Map(CATEGORIAS_ISA.map((c) => [c.id, 0]));
+  const jornadas = new Map(); // combinação -> { tags, n, status: Map }
+
+  let semTag = 0;
+  let passouSuporte = 0;
+  let isaTotal = 0;
+  let comMarketing = 0;
+
+  for (const linha of linhas) {
+    const n = Number(linha.n) || 0;
+    const status = linha.status || '(sem status)';
+    const tags = separarTags(linha.tag);
+
+    if (!tags.length) {
+      semTag += n;
+      continue;
+    }
+
+    // jornada: a combinação inteira, na ordem em que o cliente passou
+    const chaveJornada = tags.join(' || ');
+    if (!jornadas.has(chaveJornada)) {
+      jornadas.set(chaveJornada, { tags, n: 0, status: new Map() });
+    }
+    const j = jornadas.get(chaveJornada);
+    j.n += n;
+    contar(j.status, status, n);
+
+    if (combinacaoEhEncerramentoIsa(tags)) isaTotal += n;
+    for (const c of CATEGORIAS_ISA) {
+      if (combinacaoAtendeIsa(tags, c)) isaPorCategoria.set(c.id, isaPorCategoria.get(c.id) + n);
+    }
+
+    // "passou pelo suporte/financeiro no bot": uma vez por atendimento, não por tag
+    if (tags.some((t) => /suporte|financeiro/i.test(t))) passouSuporte += n;
+    if (tags.some(ehTagMarketing)) comMarketing += n;
+
+    for (const t of tags) {
+      contar(porFamilia, familiaDaTag(t), n);
+      if (ehTagDeAssunto(t)) contar(motivos, t, n);
+      if (ehTagMarketing(t)) contar(marketing, t, n);
+    }
+  }
+
+  const lista = (mapa, base) => [...mapa.entries()]
+    .map(([chave, n]) => ({ chave, n, pct: base ? n / base : null }))
+    .sort((a, b) => b.n - a.n);
+
+  return {
+    semTag,
+    passouSuporte,
+    motivos: [
+      ...lista(motivos, total).map((m) => ({
+        ...m,
+        // o rótulo legível vai junto do original: a tela mostra um e o `title`
+        // guarda o outro, para quem precisa achar a tag no MatrixGO
+        label: motivoLegivel(m.chave),
+        familia: familiaDaTag(m.chave),
+      })),
+      // "sem tag" fecha a lista: é a lacuna de análise, não um motivo
+      ...(semTag ? [{
+        chave: '(sem tag)', label: 'Sem tag identificada', familia: 'nenhuma',
+        n: semTag, pct: total ? semTag / total : null, semDado: true,
+      }] : []),
+    ],
+    marketing: {
+      total: comMarketing,
+      pct: total ? comMarketing / total : null,
+      itens: lista(marketing, comMarketing),
+    },
+    isa: {
+      total: isaTotal,
+      pct: total ? isaTotal / total : null,
+      categorias: CATEGORIAS_ISA.map((c) => ({
+        id: c.id,
+        label: c.label,
+        n: isaPorCategoria.get(c.id),
+      })),
+    },
+    porFamilia: lista(porFamilia, null),
+    jornada: [...jornadas.values()]
+      .sort((a, b) => b.n - a.n)
+      .slice(0, 40)
+      .map((j) => {
+        const dominante = [...j.status.entries()].sort((a, b) => b[1] - a[1])[0];
+        return {
+          passos: j.tags.map((t) => ({ tag: tagAmigavel(t), familia: familiaDaTag(t) })),
+          n: j.n,
+          status: dominante?.[0] || null,
+        };
+      }),
   };
 }
 
@@ -119,10 +315,15 @@ export async function hsm(filtros) {
     query(`select status, count(*) n from ${HSM} where ${onde} group by status order by n desc`, params),
     query(`select report_date dia, count(*) enviadas,
                   sum(case when status = 'Lida' then 1 else 0 end) lidas,
-                  sum(case when status in ('Lida','Entregue') then 1 else 0 end) entregues
-             from ${HSM} where ${onde} group by dia order by dia`, params),
+                  sum(case when status in ('Lida','Entregue') then 1 else 0 end) entregues,
+                  sum(case when ${entregue} then 0 else 1 end) falhas
+             from ${HSM} where ${onde} group by dia order by dia`, paramsComOk),
+    // `entregues` entrou aqui: sem ela a tabela por template não tinha taxa de
+    // entrega, só de leitura — e é a taxa de entrega que separa "template ruim"
+    // de "público ruim"
     query(`select template_name, category, count(*) enviadas,
                   sum(case when status = 'Lida' then 1 else 0 end) lidas,
+                  sum(case when status in ('Lida','Entregue') then 1 else 0 end) entregues,
                   sum(case when ${entregue} then 0 else 1 end) falhas
              from ${HSM} where ${onde} and template_name <> ''
             group by template_name, category order by enviadas desc limit 30`, paramsComOk),
@@ -138,25 +339,98 @@ export async function hsm(filtros) {
     .filter((r) => !HSM_OK.includes(r.status))
     .reduce((s, r) => s + num(r.n), 0);
 
+  const taxa = (a, b) => (b ? a / b : null);
+
   return {
-    kpis: { enviadas, entregues, lidas, falhas, taxaEntrega: enviadas ? entregues / enviadas : null },
+    kpis: {
+      enviadas,
+      entregues,
+      lidas,
+      falhas,
+      taxaEntrega: taxa(entregues, enviadas),
+      taxaLeitura: taxa(lidas, enviadas),
+      // ler sobre o ENTREGUE é a leitura honesta do interesse: quem não recebeu
+      // não tinha como ler, e diluir isso na base de enviadas esconde template ruim
+      taxaLeituraDoEntregue: taxa(lidas, entregues),
+      diasComEnvio: porDia.rows.length,
+      /**
+       * A app original tem um KPI "Respondidas", que vem de uma coluna do CSV
+       * analítico do MatrixGO. A tabela não guarda esse dado — conferido: zero
+       * linhas com status contendo "respond" — então o número seria sempre 0.
+       * Fica declarado como indisponível para a tela poder dizer isso, em vez de
+       * mostrar um zero que parece resultado.
+       */
+      respondidas: null,
+    },
+
+    /**
+     * Funil de entrega. Cada etapa traz a fração sobre o ENVIADO, que é a base
+     * que não muda de degrau para degrau — é o que deixa o funil comparável.
+     */
+    funil: [
+      { chave: 'Enviadas', n: enviadas, pct: 1 },
+      { chave: 'Entregues', n: entregues, pct: taxa(entregues, enviadas) },
+      { chave: 'Lidas', n: lidas, pct: taxa(lidas, enviadas) },
+      { chave: 'Não entregues', n: falhas, pct: taxa(falhas, enviadas), ruim: true },
+    ],
+
     // "motivo da falha" aqui é o próprio status: é assim que a plataforma reporta
     // (ex.: "A Meta decidiu não entregar a mensagem")
     falhas: porStatus.rows
       .filter((r) => !HSM_OK.includes(r.status))
-      .map((r) => ({ chave: r.status || '(sem status)', n: num(r.n) })),
-    porStatus: porStatus.rows.map((r) => ({ chave: r.status || '(sem status)', n: num(r.n) })),
+      .map((r) => ({ chave: r.status || '(sem status)', n: num(r.n), pct: taxa(num(r.n), falhas) })),
+    porStatus: porStatus.rows.map((r) => ({
+      chave: r.status || '(sem status)',
+      n: num(r.n),
+      pct: taxa(num(r.n), enviadas),
+      entregou: HSM_OK.includes(r.status),
+    })),
     porDia: porDia.rows.map((r) => ({
       periodo: soData(r.dia), label: rotuloDia(soData(r.dia)),
-      enviadas: num(r.enviadas), entregues: num(r.entregues), lidas: num(r.lidas),
+      enviadas: num(r.enviadas), entregues: num(r.entregues), lidas: num(r.lidas), falhas: num(r.falhas),
+      taxaEntrega: taxa(num(r.entregues), num(r.enviadas)),
+      taxaLeitura: taxa(num(r.lidas), num(r.enviadas)),
     })),
     porTemplate: porTemplate.rows.map((r) => ({
       chave: r.template_name, categoria: r.category, enviadas: num(r.enviadas),
-      lidas: num(r.lidas), falhas: num(r.falhas),
-      taxaLeitura: num(r.enviadas) ? num(r.lidas) / num(r.enviadas) : null,
+      entregues: num(r.entregues), lidas: num(r.lidas), falhas: num(r.falhas),
+      taxaEntrega: taxa(num(r.entregues), num(r.enviadas)),
+      taxaLeitura: taxa(num(r.lidas), num(r.enviadas)),
     })),
-    porCategoria: porCategoria.rows.map((r) => ({ chave: r.categoria, n: num(r.n) })),
+    porCategoria: porCategoria.rows.map((r) => ({ chave: r.categoria, n: num(r.n), pct: taxa(num(r.n), enviadas) })),
   };
+}
+
+/**
+ * Mensagens HSM que não foram entregues, para o detalhamento de um motivo.
+ *
+ * A tela lista os motivos e abre a lista de quem caiu em cada um — sem isso o
+ * motivo é um número sem ação possível.
+ */
+export async function detalhamentoFalhasHsm(filtros, limite = 300) {
+  const where = ['report_date >= ?', 'report_date <= ?', `status NOT IN (${HSM_OK.map(() => '?').join(',')})`];
+  const params = [soData(filtros.de), soData(filtros.ateInclusivo), ...HSM_OK];
+  filtroIn('template_name', filtros.template, where, params);
+  filtroIn('category', filtros.categoria, where, params);
+  if (filtros.motivo) {
+    where.push('status = ?');
+    params.push(String(filtros.motivo));
+  }
+  const { rows } = await query(
+    `select sent_at, template_name, category, phone, contact_name, status, protocol_number
+       from ${HSM} where ${where.join(' AND ')}
+      order by sent_at desc limit ?`,
+    [...params, limite],
+  );
+  return rows.map((r) => ({
+    enviadaEm: r.sent_at,
+    template: r.template_name,
+    categoria: r.category,
+    telefone: r.phone,
+    contato: r.contact_name,
+    motivo: r.status,
+    protocolo: r.protocol_number,
+  }));
 }
 
 // ------------------------------------------------------------------------ CX
@@ -173,7 +447,7 @@ export async function cx(filtros) {
   filtroIn('cliente_cidade', filtros.cidade, where, params);
   const onde = where.join(' AND ');
 
-  const [porDia, porFluxo, porCidade, porMensagem, total] = await Promise.all([
+  const [porDia, porFluxo, porCidade, porBairro, porMensagem, total, respostas, tagsCx] = await Promise.all([
     query(`select date(data_hora_disparo) dia, count(*) disparos,
                   sum(case when status_envio = 1 then 1 else 0 end) sucesso
              from ${CX} where ${onde} group by dia order by dia`, params),
@@ -183,19 +457,28 @@ export async function cx(filtros) {
     query(`select coalesce(nullif(cliente_cidade, ''), '(sem cidade)') cidade, count(*) disparos,
                   sum(case when status_envio = 1 then 1 else 0 end) sucesso
              from ${CX} where ${onde} group by cidade order by disparos desc limit 25`, params),
+    query(`select coalesce(nullif(cliente_bairro, ''), '(sem bairro)') bairro,
+                  coalesce(nullif(cliente_cidade, ''), '(sem cidade)') cidade, count(*) disparos,
+                  sum(case when status_envio = 1 then 1 else 0 end) sucesso
+             from ${CX} where ${onde} group by bairro, cidade order by disparos desc limit 25`, params),
     // a mensagem de retorno é o "motivo": sucesso vem como texto, falha vem com o
     // código HTTP e o corpo do erro, que fica longo — o corte deixa o motivo legível
     query(`select left(coalesce(nullif(mensagem_envio, ''), '(sem retorno)'), 70) motivo,
                   count(*) n, status_envio
              from ${CX} where ${onde} group by motivo, status_envio order by n desc limit 20`, params),
     query(`select count(*) disparos, sum(case when status_envio = 1 then 1 else 0 end) sucesso,
-                  count(distinct cliente_contrato) contratos
+                  count(distinct cliente_contrato) contratos,
+                  count(distinct nullif(cliente_cidade, '')) cidades,
+                  min(data_hora_disparo) primeiro, max(data_hora_disparo) ultimo
              from ${CX} where ${onde}`, params),
+    respostasCx(filtros),
+    tagsDeCx(filtros),
   ]);
 
   const t = total.rows[0] || {};
   const disparos = num(t.disparos) || 0;
   const sucesso = num(t.sucesso) || 0;
+  const taxa = (a, b) => (b ? a / b : null);
 
   return {
     kpis: {
@@ -203,7 +486,21 @@ export async function cx(filtros) {
       sucesso,
       falha: disparos - sucesso,
       contratos: num(t.contratos) || 0,
-      taxaSucesso: disparos ? sucesso / disparos : null,
+      cidades: num(t.cidades) || 0,
+      taxaSucesso: taxa(sucesso, disparos),
+      primeiroDisparo: t.primeiro || null,
+      ultimoDisparo: t.ultimo || null,
+      // ---- da pesquisa de satisfação (tags CS_CX_72HRS_*) ----
+      avaliacoes: respostas.total,
+      ok: respostas.ok,
+      nok: respostas.nok,
+      score: respostas.score,
+      /**
+       * Quantos dos disparos bem-sucedidos viraram resposta. A base é o SUCESSO
+       * do disparo, e não o total: cobrar resposta de quem nunca recebeu a
+       * mensagem misturaria problema de entrega com desinteresse.
+       */
+      taxaResposta: taxa(respostas.total, sucesso),
     },
     porDia: porDia.rows.map((r) => ({
       periodo: soData(r.dia), label: rotuloDia(soData(r.dia)),
@@ -212,16 +509,286 @@ export async function cx(filtros) {
     })),
     porFluxo: porFluxo.rows.map((r) => ({
       chave: r.fluxo || '(sem fluxo)', disparos: num(r.disparos), sucesso: num(r.sucesso),
-      taxa: num(r.disparos) ? num(r.sucesso) / num(r.disparos) : null,
+      taxa: taxa(num(r.sucesso), num(r.disparos)),
     })),
     porCidade: porCidade.rows.map((r) => ({
       chave: r.cidade, disparos: num(r.disparos), sucesso: num(r.sucesso),
-      taxa: num(r.disparos) ? num(r.sucesso) / num(r.disparos) : null,
+      taxa: taxa(num(r.sucesso), num(r.disparos)),
+    })),
+    porBairro: porBairro.rows.map((r) => ({
+      chave: `${r.bairro} · ${r.cidade}`, disparos: num(r.disparos), sucesso: num(r.sucesso),
+      taxa: taxa(num(r.sucesso), num(r.disparos)),
     })),
     porMensagem: porMensagem.rows.map((r) => ({
       chave: r.motivo, n: num(r.n), sucesso: num(r.status_envio) === 1,
+      pct: taxa(num(r.n), disparos),
     })),
+
+    // ---- pesquisa de satisfação ----
+    respostas: {
+      ok: respostas.ok,
+      nok: respostas.nok,
+      total: respostas.total,
+      score: respostas.score,
+      porDia: respostas.porDia,
+    },
+    tagsCx,
   };
+}
+
+/**
+ * A pesquisa de satisfação pós-instalação, medida pelas tags do atendimento.
+ *
+ * Quem responde a pesquisa gera um atendimento no MatrixGO marcado com
+ * `CS_CX_72HRS_OK` ou `CS_CX_72HRS_NOK` — é daí, e não da tabela de disparos, que
+ * sai o CX Score. Conferido na base: 1.875 OK e 422 NOK no histórico.
+ *
+ * A janela é a do ATENDIMENTO, não a do disparo: a pessoa responde quando quer, e
+ * amarrar a resposta à data do disparo perderia quem respondeu no dia seguinte.
+ */
+async function respostasCx(filtros) {
+  const { rows } = await query(
+    `select date(entry_at) dia, tag, count(*) n
+       from ${ATENDIMENTO}
+      where entry_at >= ? and entry_at < ?
+        and (tag like '%CS_CX_72HRS_OK%' or tag like '%CS_CX_72HRS_NOK%')
+      group by dia, tag`,
+    [filtros.de, filtros.ate],
+  );
+
+  let ok = 0;
+  let nok = 0;
+  const porDia = new Map();
+  for (const r of rows) {
+    const tags = separarTags(r.tag);
+    const ehOk = tags.some(ehTagCxOk);
+    const ehNok = tags.some(ehTagCxNok);
+    const n = num(r.n);
+    const dia = soData(r.dia);
+    if (!porDia.has(dia)) porDia.set(dia, { ok: 0, nok: 0 });
+    if (ehOk) { ok += n; porDia.get(dia).ok += n; }
+    if (ehNok) { nok += n; porDia.get(dia).nok += n; }
+  }
+
+  const total = ok + nok;
+  return {
+    ok,
+    nok,
+    total,
+    score: total ? ok / total : null,
+    porDia: [...porDia.entries()]
+      .filter(([, v]) => v.ok || v.nok)
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([dia, v]) => ({
+        periodo: dia, label: rotuloDia(dia), ok: v.ok, nok: v.nok,
+        total: v.ok + v.nok, score: v.ok + v.nok ? v.ok / (v.ok + v.nok) : null,
+      })),
+  };
+}
+
+/** Todas as tags de CS/CX do período — mostra o funil da pesquisa, não só o placar. */
+async function tagsDeCx(filtros) {
+  const { rows } = await query(
+    `select tag, count(*) n from ${ATENDIMENTO}
+      where entry_at >= ? and entry_at < ? and (tag like '%CS\\_%' or tag like '%CX%')
+      group by tag`,
+    [filtros.de, filtros.ate],
+  );
+  const conta = new Map();
+  for (const r of rows) {
+    for (const t of separarTags(r.tag)) {
+      if (ehTagCx(t)) conta.set(t, (conta.get(t) || 0) + num(r.n));
+    }
+  }
+  return [...conta.entries()]
+    .map(([chave, n]) => ({ chave, n, resultado: ehTagCxOk(chave) ? 'ok' : ehTagCxNok(chave) ? 'nok' : null }))
+    .sort((a, b) => b.n - a.n);
+}
+
+/**
+ * Cruza cada disparo de CX com o atendimento que ele gerou e com a resposta.
+ *
+ * O cruzamento é feito em MEMÓRIA, e isso é decisão de desempenho, não de
+ * preguiça: casar por telefone exige normalizar os dois lados (um guarda
+ * `5551984360092`, o outro pode vir sem país), e um `regexp_replace` dos dois
+ * lados no SQL vira varredura de 1,6 milhão × os disparos — o teste travou em
+ * dez minutos. Aqui são duas consultas indexadas e dois `Map`.
+ *
+ * A ordem de casamento segue a da app original: protocolo, depois telefone. Ela
+ * também tenta `cod_atendimento`, que na base não casa com nada (conferido:
+ * zero) — então esse salto foi omitido em vez de copiado.
+ */
+export async function cxCruzado(filtros, limite = 400) {
+  const where = ['data_hora_disparo >= ?', 'data_hora_disparo < ?'];
+  const params = [filtros.de, filtros.ate];
+  filtroIn('n8n_flow', filtros.fluxo, where, params);
+  filtroIn('cliente_cidade', filtros.cidade, where, params);
+
+  /**
+   * A janela das respostas é mais LARGA que a dos disparos, de propósito: a
+   * pesquisa vai 72 h após a instalação e a pessoa responde quando quer. Sem a
+   * folga, um disparo do último dia do período apareceria sempre como "sem
+   * resposta" — e a taxa de resposta cairia por recorte, não por comportamento.
+   */
+  const folgaDias = 10;
+  const ateComFolga = new Date(new Date(String(filtros.ate).replace(' ', 'T')).getTime() + folgaDias * 864e5);
+  const iso = (d) => d.toISOString().slice(0, 19).replace('T', ' ');
+
+  const [disparos, atendimentos] = await Promise.all([
+    /**
+     * TODOS os disparos do período, sem `limit`.
+     *
+     * A primeira versão trazia `order by data_hora_disparo desc limit 400`, e o
+     * resumo saía enviesado de um jeito difícil de notar: a pesquisa chega 72 h
+     * depois da instalação, então os disparos mais recentes são justamente os que
+     * ainda não têm resposta. Com o corte nos 400 mais novos, 335 apareciam como
+     * "não localizados" e a taxa de resposta media o recorte, não o
+     * comportamento — o score dava 93,8% contra os 89,4% reais.
+     *
+     * Trazer tudo é seguro porque a tabela inteira tem 5.408 linhas; o `limite`
+     * agora corta apenas a LISTA devolvida, depois de o resumo estar calculado.
+     */
+    query(
+      `select id, data_hora_disparo, prot_atendimento, cod_atendimento, cliente_nome, telefone,
+              cliente_cidade, cliente_bairro, cliente_contrato, status_envio, mensagem_envio, n8n_flow
+         from ${CX} where ${where.join(' AND ')}
+        order by data_hora_disparo desc`,
+      params,
+    ),
+    // só os atendimentos que interessam: os que têm tag de CS
+    query(
+      `select protocol_number, phone, tag, entry_at, status
+         from ${ATENDIMENTO}
+        where entry_at >= ? and entry_at < ? and tag like '%CS\\_CX%'`,
+      [filtros.de, iso(ateComFolga)],
+    ),
+  ]);
+
+  const porProtocolo = new Map();
+  const porTelefone = new Map();
+  for (const a of atendimentos.rows) {
+    const tags = separarTags(a.tag);
+    const registro = {
+      protocolo: a.protocol_number,
+      entrada: a.entry_at,
+      status: a.status,
+      resultado: tags.some(ehTagCxOk) ? 'ok' : tags.some(ehTagCxNok) ? 'nok' : 'semresposta',
+    };
+    const p = soDigitos(a.protocol_number);
+    if (p && !porProtocolo.has(p)) porProtocolo.set(p, registro);
+    for (const k of chavesDeTelefone(a.phone)) {
+      if (!porTelefone.has(k)) porTelefone.set(k, registro);
+    }
+  }
+
+  /**
+   * Um atendimento só conta uma vez. Dois disparos para o mesmo cliente casam com
+   * a mesma resposta, e contar as duas infla o número de respostas — é o mesmo
+   * cuidado do `primeiro` na app original.
+   */
+  const usados = new Set();
+
+  const itens = disparos.rows.map((d) => {
+    const p = soDigitos(d.prot_atendimento);
+    let achado = p ? porProtocolo.get(p) : null;
+    let via = achado ? 'protocolo' : null;
+    if (!achado) {
+      for (const k of chavesDeTelefone(d.telefone)) {
+        const r = porTelefone.get(k);
+        if (r) { achado = r; via = 'telefone'; break; }
+      }
+    }
+    const primeiro = achado ? !usados.has(achado) : false;
+    if (achado) usados.add(achado);
+
+    return {
+      disparadoEm: d.data_hora_disparo,
+      protocolo: d.prot_atendimento || null,
+      cliente: d.cliente_nome,
+      telefone: d.telefone,
+      cidade: d.cliente_cidade || '(sem cidade)',
+      bairro: d.cliente_bairro || '(sem bairro)',
+      contrato: d.cliente_contrato,
+      fluxo: d.n8n_flow,
+      gerado: num(d.status_envio) === 1,
+      retorno: d.mensagem_envio,
+      ...separarErro(d.mensagem_envio, num(d.status_envio) === 1),
+      via,
+      // `primeiro` distingue a resposta nova da repetida; a tela soma só as novas
+      resposta: achado ? achado.resultado : 'naoachado',
+      primeira: primeiro,
+    };
+  });
+
+  // o resumo é de TODOS os disparos do período; a lista é que vem cortada
+  const respondidos = itens.filter((i) => i.primeira && (i.resposta === 'ok' || i.resposta === 'nok'));
+  const ok = respondidos.filter((i) => i.resposta === 'ok').length;
+  const gerados = itens.filter((i) => i.gerado).length;
+
+  /**
+   * Disparo recente ainda não teve tempo de virar resposta: a pesquisa vai 72 h
+   * depois. Contá-lo como "não respondeu" pune o período por ser recente, então
+   * a taxa de resposta usa como base só os disparos maduros — e a tela informa
+   * quantos ficaram de fora por isso.
+   */
+  const agora = Date.now();
+  const maduro = (i) => agora - new Date(i.disparadoEm).getTime() > 72 * 3600e3;
+  const gerardosMaduros = itens.filter((i) => i.gerado && maduro(i)).length;
+  const aguardando = gerados - gerardosMaduros;
+
+  return {
+    itens: itens.slice(0, limite),
+    resumo: {
+      disparos: itens.length,
+      gerados,
+      erros: itens.length - gerados,
+      localizados: itens.filter((i) => i.via).length,
+      porProtocolo: itens.filter((i) => i.via === 'protocolo').length,
+      porTelefone: itens.filter((i) => i.via === 'telefone').length,
+      respostas: respondidos.length,
+      ok,
+      nok: respondidos.length - ok,
+      score: respondidos.length ? ok / respondidos.length : null,
+      taxaResposta: gerardosMaduros ? respondidos.length / gerardosMaduros : null,
+      aguardandoJanela: aguardando,
+      cidades: new Set(itens.map((i) => i.cidade)).size,
+      primeiro: itens.length ? itens[itens.length - 1].disparadoEm : null,
+      ultimo: itens.length ? itens[0].disparadoEm : null,
+      mostrando: Math.min(itens.length, limite),
+      truncado: itens.length > limite,
+    },
+    /** Motivos de erro agrupados pelo código, para a tela listar e filtrar. */
+    erros: (() => {
+      const grupos = new Map();
+      for (const i of itens) {
+        if (i.gerado) continue;
+        const chave = i.motivoErro || '(sem retorno)';
+        if (!grupos.has(chave)) grupos.set(chave, { chave, n: 0, codigos: new Set() });
+        const g = grupos.get(chave);
+        g.n += 1;
+        if (i.codigoErro) g.codigos.add(i.codigoErro);
+      }
+      return [...grupos.values()]
+        .map((g) => ({ chave: g.chave, n: g.n, codigos: [...g.codigos] }))
+        .sort((a, b) => b.n - a.n);
+    })(),
+  };
+}
+
+/**
+ * Separa o código HTTP do corpo do erro na mensagem de retorno.
+ *
+ * As falhas vêm como `"400 - {\"error\":...}"`, e agrupar pela mensagem inteira
+ * criaria um grupo por cliente (o corpo traz o número dele). O código sozinho
+ * agrupa de verdade.
+ */
+function separarErro(mensagem, sucesso) {
+  if (sucesso) return { codigoErro: null, motivoErro: null };
+  const texto = String(mensagem || '').trim();
+  if (!texto) return { codigoErro: null, motivoErro: '(sem retorno)' };
+  const m = /^\s*(\d{3})\s*[-:]?\s*(.*)$/s.exec(texto);
+  if (m) return { codigoErro: m[1], motivoErro: (m[2] || '').slice(0, 160) || '(sem detalhe)' };
+  return { codigoErro: null, motivoErro: texto.slice(0, 160) };
 }
 
 export async function detalhamentoCx(filtros, limite = 500) {
