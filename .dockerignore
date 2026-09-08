@@ -1,0 +1,17 @@
+# O que não deve entrar no contexto de build (nem na imagem)
+node_modules
+**/node_modules
+dist
+**/dist
+server/public
+server/data
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+*.log
+README.md
+Dockerfile
+docker-compose.yml
+.dockerignore

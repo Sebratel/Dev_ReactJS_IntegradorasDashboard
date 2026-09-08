@@ -1,0 +1,105 @@
+# Stack para Portainer.
+#
+# Um serviço só: o Express serve o front (bundle do Vite) e a API na MESMA
+# porta, a 8091. Não há serviço de banco aqui — as bases (MariaDB e o
+# PostgreSQL do Voalle) são externas e já existem; este container só as
+# consulta, sempre em leitura.
+#
+# Em Portainer: Stacks -> Add stack -> Repository, apontando para
+# github.com/Sebratel/Dev_ReactJS_IntegradorasDashboard, e preencha as
+# variáveis abaixo em "Environment variables". Nenhum segredo mora neste
+# arquivo, de propósito.
+services:
+  integradoras-dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # Estas quatro entram no bundle do front em tempo de BUILD. Mudar uma
+      # delas exige reconstruir a imagem (em Portainer: "Re-pull image and
+      # redeploy" não basta — use "Update the stack" com rebuild).
+      args:
+        VITE_FIREBASE_PROJECT_ID: "${VITE_FIREBASE_PROJECT_ID:-}"
+        VITE_FIREBASE_API_KEY: "${VITE_FIREBASE_API_KEY:-}"
+        VITE_FIREBASE_AUTH_DOMAIN: "${VITE_FIREBASE_AUTH_DOMAIN:-}"
+        VITE_FIREBASE_APP_ID: "${VITE_FIREBASE_APP_ID:-}"
+    image: integradoras-dashboard:1.0.0
+    container_name: integradoras-dashboard
+    restart: unless-stopped
+    ports:
+      # host:container — front e API na 8091, a porta pedida para este sistema.
+      # 8080/8081 já estão ocupadas pelo dashboard comercial.
+      - "${HOST_PORT:-8091}:8091"
+    environment:
+      TZ: America/Sao_Paulo
+      PORT: 8091
+
+      # ---- elleven (PostgreSQL, ERP/CRM Voalle) ----
+      DB_ELLEVEN_HOST: ${DB_ELLEVEN_HOST}
+      DB_ELLEVEN_DATABASE: ${DB_ELLEVEN_DATABASE}
+      DB_ELLEVEN_USER: ${DB_ELLEVEN_USER}
+      DB_ELLEVEN_PASSWORD: ${DB_ELLEVEN_PASSWORD}
+      DB_ELLEVEN_PORT: ${DB_ELLEVEN_PORT:-5432}
+
+      # ---- MariaDB (Matrix, Native, massivas, quartis) ----
+      # A conexão abre em DB_Massives, mas as consultas qualificam o banco na
+      # própria SQL (API_WebDeveloper, DB_Applicattion, DB_Technical_Support).
+      # O usuário precisa de SELECT nos quatro.
+      DB_MARIA_HOST: ${DB_MARIA_HOST}
+      DB_MARIA_DATABASE: ${DB_MARIA_DATABASE:-DB_Massives}
+      DB_MARIA_USER: ${DB_MARIA_USER}
+      DB_MARIA_PASSWORD: ${DB_MARIA_PASSWORD}
+      DB_MARIA_PORT: ${DB_MARIA_PORT:-3306}
+
+      # ---- ponte agente -> identidade (APIs externas) ----
+      MATRIX_API_URL: ${MATRIX_API_URL:-https://sebratel.matrixdobrasil.ai/rest/v1/agentes}
+      MATRIX_API_TOKEN: ${MATRIX_API_TOKEN}
+      NATIVE_API_TOKEN_URL: ${NATIVE_API_TOKEN_URL:-https://sebratel.native-infinity.com.br/api/token}
+      NATIVE_API_USERS_URL: ${NATIVE_API_USERS_URL:-https://sebratel.native-infinity.com.br/api/users}
+      NATIVE_API_BEARER: ${NATIVE_API_BEARER}
+      NATIVE_API_USERNAME: ${NATIVE_API_USERNAME}
+      NATIVE_API_PASSWORD: ${NATIVE_API_PASSWORD}
+
+      # ---- login (Firebase) e controle de acesso ----
+      # Sem FIREBASE_PROJECT_ID o dashboard sobe ABERTO e todo mundo entra como
+      # administrador — inclusive nas telas de desempenho individual
+      # (Produtividade e Quartis). Em produção, preencha.
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
+      ALLOWED_DOMAIN: ${ALLOWED_DOMAIN:-sebratel.com.br}
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
+
+      # ---- provedor de IA (botão "Insights" nos gráficos) ----
+      # Opcional, e melhor cadastrar pela tela Configurações -> Provedor de IA:
+      # lá a chave fica cifrada no volume e troca sem reiniciar.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      AI_MODEL: ${AI_MODEL:-claude-opus-5}
+
+      # ---- recorte de datas (semente; a tela Configurações manda) ----
+      PERIODO_PADRAO_DIAS: ${PERIODO_PADRAO_DIAS:-60}
+      PERIODO_MAX_DIAS: ${PERIODO_MAX_DIAS:-365}
+
+      NODE_OPTIONS: --max-old-space-size=1024
+    volumes:
+      # Papéis, permissões por tela, recorte de datas e a chave de IA cifrada
+      # sobrevivem ao recriar o container. Sem isto, quem configurou acesso
+      # perde tudo no próximo deploy.
+      - integradoras-dashboard-data:/app/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8091/api/geral/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          # As telas de Quartis e Produtividade varrem centenas de milhares de
+          # linhas quando alguém pede um ano.
+          memory: 1.5g
+
+volumes:
+  integradoras-dashboard-data:
