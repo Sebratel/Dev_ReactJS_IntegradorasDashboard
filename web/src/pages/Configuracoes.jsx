@@ -13,11 +13,32 @@
  * 3. **A aba de datas configura o PEDIDO, não a carga.** Não há ETL aqui: as
  *    consultas vão direto ao banco com o período da tela. Ver `params.js`.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiAdmin } from '../api';
 import { useSession } from '../auth/session.jsx';
-import { Erro, Loading, Visual } from '../components/ui';
+import { exportarTabela } from '../components/exportar';
+import { Erro, Loading, useSlotExportar, Visual } from '../components/ui';
 import { Icone } from '../components/Icone';
+
+/**
+ * As abas dividem um único `Visual`, mas só uma renderiza por vez — então o
+ * slot de exportação do cabeçalho nunca tem dois donos ao mesmo tempo.
+ *
+ * Cada aba ignora o nome que o slot oferece (seria "Configurações" nas quatro)
+ * e dá o seu: o arquivo precisa dizer o que é sem abrir.
+ */
+function useExportarAba(nome, montar) {
+  const registrar = useSlotExportar();
+  const montarRef = useRef(null);
+  montarRef.current = montar;
+  useEffect(() => {
+    if (!registrar) return undefined;
+    return registrar(() => {
+      const conteudo = montarRef.current();
+      if (conteudo) exportarTabela({ nome, ...conteudo });
+    });
+  }, [registrar, nome]);
+}
 
 const PAPEL_LABEL = { viewer: 'Visualizador', dev: 'DEV', admin: 'Administrador' };
 const PAPEL_AJUDA = {
@@ -52,6 +73,21 @@ function AbaUsuarios() {
     setOcupado(chave);
     try { await fn(); await carregar(); setErro(null); } catch (e) { setErro(e); } finally { setOcupado(null); }
   };
+
+  // Vale exportar: é a lista de quem tem acesso, que é o que se pede numa
+  // auditoria. A coluna de ações não vai — botão não é dado.
+  useExportarAba('acessos-usuarios', () => {
+    const linhas = dados?.usuarios || [];
+    if (!linhas.length) return null;
+    return {
+      colunas: [
+        { key: 'email', titulo: 'E-mail' },
+        { key: 'papel', titulo: 'Papel', fmt: (v) => PAPEL_LABEL[v] || v },
+        { key: 'origem', titulo: 'Origem', fmt: (v) => (v === 'env' ? 'semente (.env)' : 'definido na tela') },
+      ],
+      linhas,
+    };
+  });
 
   const conceder = () => {
     const e = email.trim().toLowerCase();
@@ -204,6 +240,38 @@ function AbaTelas() {
   useEffect(() => { carregar(); }, [carregar]);
 
   const limparRascunho = () => { setRasTelas({}); setRasModo({}); setPendentes([]); };
+
+  /**
+   * O CSV da matriz responde "quem vê o quê" — e diz POR QUÊ, que é o que a
+   * tela mostra com ícone em vez de caixa: administrador passa por definição e
+   * tela aberta vale para todo o domínio. Exportar só `sim`/`não` esconderia
+   * justamente a parte que importa numa auditoria.
+   *
+   * O gancho fica ANTES do retorno de carregamento: hook não pode ficar depois
+   * de um `return` condicional.
+   */
+  useExportarAba('acesso-por-tela', () => {
+    const lista = dados?.telas || [];
+    const pessoas = dados?.pessoas || [];
+    if (!lista.length || !pessoas.length) return null;
+    const modo = (t) => rasModo[t.id] ?? t.modo;
+    return {
+      colunas: [
+        { key: 'email', titulo: 'Pessoa' },
+        { key: 'papel', titulo: 'Papel', fmt: (v) => PAPEL_LABEL[v] || v },
+        ...lista.map((t) => ({
+          key: `tela_${t.id}`,
+          titulo: t.label + (modo(t) === 'todos' ? ' (aberta a todos)' : ''),
+          fmt: (_v, p) => {
+            if (p.veTudo) return 'sim (administrador)';
+            if (modo(t) === 'todos') return 'sim (tela aberta)';
+            return (rasTelas[p.email] ?? p.telas).includes(t.id) ? 'sim' : 'não';
+          },
+        })),
+      ],
+      linhas: pessoas,
+    };
+  });
 
   if (!dados && !erro) return <Loading texto="Carregando acessos…" />;
 

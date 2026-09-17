@@ -1,6 +1,36 @@
+import { createContext, useCallback, useContext, useState } from 'react';
 import { Icone } from './Icone';
 
+/**
+ * Slot de exportação do cabeçalho.
+ *
+ * Quem tem os dados é a tabela; quem tem espaço para o botão é o cabeçalho. Em
+ * vez de repetir a fiação nas quinze chamadas — e esquecer numa delas —, a
+ * tabela se anuncia aqui e o `Visual` desenha o botão. Tabela nova passa a ter
+ * exportação sem ninguém precisar lembrar de ligar.
+ *
+ * O botão fica no cabeçalho, e não acima da tabela, porque uma faixa a mais
+ * custaria altura — e altura é o recurso escasso aqui: várias telas já rolam
+ * em 1366x768.
+ */
+const SlotExportar = createContext(null);
+
+export function useSlotExportar() {
+  return useContext(SlotExportar);
+}
+
 export function Visual({ title, sub, children, flush = false, style, actions, className = 'v-grafico' }) {
+  const [exportar, setExportar] = useState(null);
+
+  // `registrar` tem de ser estável: ele entra na lista de dependências do
+  // efeito da tabela, e um valor novo a cada render faria o efeito rodar sem
+  // parar. O `() => fn` existe porque o setState trata função como atualizador
+  // — sem ele, guardaria o RETORNO da função em vez da função.
+  const registrar = useCallback((fn) => {
+    setExportar(() => fn);
+    return () => setExportar((atual) => (atual === fn ? null : atual));
+  }, []);
+
   return (
     <section className={`visual ${className}`} style={style}>
       {title && (
@@ -8,11 +38,14 @@ export function Visual({ title, sub, children, flush = false, style, actions, cl
           <span className="titulo">
             <span>{title}</span>
             {actions}
+            {exportar && <BotaoExportar onExportar={() => exportar(title)} />}
           </span>
           {sub && <span className="sub">{sub}</span>}
         </header>
       )}
-      <div className={`body${flush ? ' flush' : ''}`}>{children}</div>
+      <SlotExportar.Provider value={registrar}>
+        <div className={`body${flush ? ' flush' : ''}`}>{children}</div>
+      </SlotExportar.Provider>
     </section>
   );
 }

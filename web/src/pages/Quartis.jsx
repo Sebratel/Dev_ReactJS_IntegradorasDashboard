@@ -1,7 +1,9 @@
+import { useEffect, useRef } from 'react';
 import { useQuartis, useProdutividadeFiltros } from '../api';
 import { CORES, CORES_QUARTIL, corDoTexto } from '../components/charts';
+import { exportarTabela } from '../components/exportar';
 import { Filtro, FiltroPeriodo, usePeriodoPadrao, useFiltros } from '../components/SlicerBar';
-import { Erro, Loading, Vazio, Visual } from '../components/ui';
+import { Erro, Loading, useSlotExportar, Vazio, Visual } from '../components/ui';
 import { hmsSeg, int, pct } from '../format';
 
 /**
@@ -37,6 +39,95 @@ function CelulaQuartil({ q }) {
     >
       {q || '—'}
     </td>
+  );
+}
+
+/**
+ * A matriz é componente próprio por causa da exportação: o slot do cabeçalho
+ * vive DENTRO do `Visual`, e só um filho dele enxerga o contexto — a página,
+ * que é quem renderiza o `Visual`, ficaria de fora.
+ *
+ * No CSV cada indicador vira duas colunas (valor e quartil), como na tela, e
+ * entra o e-mail, que na tela é só título da célula. Num arquivo que vai virar
+ * planilha de RH, saber de quem é a linha vale mais que economizar coluna.
+ */
+function MatrizQuartis({ indicadores, colaboradores }) {
+  const registrar = useSlotExportar();
+  const conteudo = useRef(null);
+  conteudo.current = { indicadores, colaboradores };
+
+  useEffect(() => {
+    if (!registrar) return undefined;
+    return registrar((nome) => {
+      const { indicadores: inds, colaboradores: linhas } = conteudo.current;
+      const colunas = [
+        { key: 'colaborador', titulo: 'Colaborador' },
+        { key: 'email', titulo: 'E-mail', fmt: (v) => v || '—' },
+        {
+          key: 'indicadoresContados',
+          titulo: 'Indicadores na nota',
+          fmt: (_v, d) => `${d.indicadoresContados}/${d.indicadoresPossiveis}`,
+        },
+      ];
+      for (const i of inds) {
+        colunas.push({
+          key: i.campo,
+          titulo: i.rotulo + (i.peso === 0 ? ' *' : ''),
+          fmt: (v) => valorFormatado(v, i.formato),
+        });
+        colunas.push({
+          key: `quartil_${i.campo}`,
+          titulo: `${i.rotulo} (quartil)`,
+          fmt: (_v, d) => d.quartis?.[i.campo] || '—',
+        });
+      }
+      colunas.push({ key: 'notaFinal', titulo: 'Nota final', fmt: (v) => (v === null ? '—' : pct(v, 1)) });
+      colunas.push({ key: 'quartilFinal', titulo: 'Quartil final', fmt: (v) => v || '—' });
+      exportarTabela({ nome, colunas, linhas });
+    });
+  }, [registrar]);
+
+  return (
+    <div className="tbl-wrap">
+      <table className="matrix">
+        <thead>
+          <tr>
+            <th className="rowhead">Colaborador</th>
+            <th title="Quantos indicadores com peso tinham dado no período">Ind.</th>
+            {indicadores.map((i) => [
+              <th key={i.campo} title={`${i.menorEhMelhor ? 'Menor é melhor' : 'Maior é melhor'} · peso ${i.peso}`}>
+                {i.rotulo}{i.peso === 0 ? ' *' : ''}
+              </th>,
+              <th key={`${i.campo}-q`}>Q</th>,
+            ])}
+            <th className="total">Nota final</th>
+            <th className="total">QF</th>
+          </tr>
+        </thead>
+        <tbody>
+          {colaboradores.map((c) => (
+            <tr key={c.email || c.colaborador}>
+              <td className="rowhead" title={c.email || undefined}>{c.colaborador}</td>
+              <td
+                className="center"
+                title={`${c.indicadoresContados} de ${c.indicadoresPossiveis} indicadores com peso entraram na nota`}
+                style={c.indicadoresContados < c.indicadoresPossiveis / 2
+                  ? { color: 'var(--pbi-gold-600)', fontWeight: 700 }
+                  : undefined}
+              >
+                {c.indicadoresContados}/{c.indicadoresPossiveis}
+              </td>
+              {indicadores.map((i) => [
+                <Celula key={i.campo} valor={c[i.campo]} formato={i.formato} />,
+                <CelulaQuartil key={`${i.campo}-q`} q={c.quartis[i.campo]} />,
+              ])}
+              <td className="total right">{c.notaFinal === null ? '—' : pct(c.notaFinal, 1)}</td>
+              <CelulaQuartil q={c.quartilFinal} />
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -82,48 +173,7 @@ export function Quartis() {
         {consulta.isLoading ? <Loading />
           : consulta.isError ? <Erro erro={consulta.error} />
           : !colaboradores.length ? <Vazio />
-          : (
-            <div className="tbl-wrap">
-              <table className="matrix">
-                <thead>
-                  <tr>
-                    <th className="rowhead">Colaborador</th>
-                    <th title="Quantos indicadores com peso tinham dado no período">Ind.</th>
-                    {indicadores.map((i) => [
-                      <th key={i.campo} title={`${i.menorEhMelhor ? 'Menor é melhor' : 'Maior é melhor'} · peso ${i.peso}`}>
-                        {i.rotulo}{i.peso === 0 ? ' *' : ''}
-                      </th>,
-                      <th key={`${i.campo}-q`}>Q</th>,
-                    ])}
-                    <th className="total">Nota final</th>
-                    <th className="total">QF</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {colaboradores.map((c) => (
-                    <tr key={c.email || c.colaborador}>
-                      <td className="rowhead" title={c.email || undefined}>{c.colaborador}</td>
-                      <td
-                        className="center"
-                        title={`${c.indicadoresContados} de ${c.indicadoresPossiveis} indicadores com peso entraram na nota`}
-                        style={c.indicadoresContados < c.indicadoresPossiveis / 2
-                          ? { color: 'var(--pbi-gold-600)', fontWeight: 700 }
-                          : undefined}
-                      >
-                        {c.indicadoresContados}/{c.indicadoresPossiveis}
-                      </td>
-                      {indicadores.map((i) => [
-                        <Celula key={i.campo} valor={c[i.campo]} formato={i.formato} />,
-                        <CelulaQuartil key={`${i.campo}-q`} q={c.quartis[i.campo]} />,
-                      ])}
-                      <td className="total right">{c.notaFinal === null ? '—' : pct(c.notaFinal, 1)}</td>
-                      <CelulaQuartil q={c.quartilFinal} />
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          : <MatrizQuartis indicadores={indicadores} colaboradores={colaboradores} />}
       </Visual>
     </div>
   );
