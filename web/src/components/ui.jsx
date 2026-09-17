@@ -1,17 +1,23 @@
-import { createContext, useCallback, useContext, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { exportarTabela } from './exportar';
 import { Icone } from './Icone';
 
 /**
  * Slot de exportação do cabeçalho.
  *
- * Quem tem os dados é a tabela; quem tem espaço para o botão é o cabeçalho. Em
- * vez de repetir a fiação nas quinze chamadas — e esquecer numa delas —, a
- * tabela se anuncia aqui e o `Visual` desenha o botão. Tabela nova passa a ter
- * exportação sem ninguém precisar lembrar de ligar.
+ * Quem tem os dados é o visual de dentro — tabela, lista de barras, funil; quem
+ * tem espaço para o botão é o cabeçalho. Em vez de repetir a fiação em cada
+ * chamada — e esquecer numa delas —, o conteúdo se anuncia aqui e o `Visual`
+ * desenha o botão. Visual novo passa a ter exportação sem ninguém lembrar de
+ * ligar.
  *
- * O botão fica no cabeçalho, e não acima da tabela, porque uma faixa a mais
+ * O botão fica no cabeçalho, e não acima do conteúdo, porque uma faixa a mais
  * custaria altura — e altura é o recurso escasso aqui: várias telas já rolam
  * em 1366x768.
+ *
+ * É uma LISTA e não um só porque há cartão com dois conjuntos dentro (Canal e
+ * Tipo, na tela de Atendimento). Com um slot único o segundo apagaria o
+ * primeiro em silêncio, e é exatamente o tipo de sumiço que ninguém percebe.
  */
 const SlotExportar = createContext(null);
 
@@ -19,17 +25,74 @@ export function useSlotExportar() {
   return useContext(SlotExportar);
 }
 
-export function Visual({ title, sub, children, flush = false, style, actions, className = 'v-grafico' }) {
-  const [exportar, setExportar] = useState(null);
+/**
+ * Anuncia um conjunto de dados exportável ao cabeçalho em volta.
+ *
+ * `montar()` devolve `{ colunas, linhas, totais }` — ou `null` quando não há o
+ * que exportar, e aí o botão nem aparece. `rotulo` só é usado quando o mesmo
+ * visual tem mais de um conjunto; com um só, o botão se chama "CSV" e o
+ * arquivo herda o título do visual.
+ *
+ * Chame SEMPRE no topo do componente, antes de qualquer `return` condicional:
+ * quase todos estes visuais devolvem cedo quando a lista chega vazia, e hook
+ * depois de `return` quebra a ordem dos hooks.
+ */
+export function useExportavel(rotulo, montar) {
+  const registrar = useSlotExportar();
+  const montarRef = useRef(null);
+  montarRef.current = montar;
 
-  // `registrar` tem de ser estável: ele entra na lista de dependências do
-  // efeito da tabela, e um valor novo a cada render faria o efeito rodar sem
-  // parar. O `() => fn` existe porque o setState trata função como atualizador
-  // — sem ele, guardaria o RETORNO da função em vez da função.
-  const registrar = useCallback((fn) => {
-    setExportar(() => fn);
-    return () => setExportar((atual) => (atual === fn ? null : atual));
+  useEffect(() => {
+    if (!registrar) return undefined;
+    // O `montar` vai por ref, e não na dependência: as telas montam os dados
+    // inline no JSX, então a identidade muda a cada render e o efeito entraria
+    // em laço.
+    return registrar({ rotulo, montar: () => montarRef.current?.() });
+  }, [registrar, rotulo]);
+}
+
+/**
+ * O lado de quem HOSPEDA o slot. Dois contêineres usam: o `Visual` e a `Secao`
+ * das telas analíticas — lá nem tudo mora dentro de um `Visual`, e o que fica
+ * solto na seção precisava de um cabeçalho onde pendurar o botão.
+ *
+ * Aninhar funciona: um `Visual` dentro de uma `Secao` captura os filhos dele,
+ * e só o que sobra sem `Visual` chega à seção. É o que se espera.
+ */
+export function useRegistroExportar() {
+  const [itens, setItens] = useState([]);
+  // `registrar` tem de ser estável: ele entra na dependência do efeito de quem
+  // se registra, e um valor novo a cada render faria o efeito rodar sem parar.
+  const registrar = useCallback((item) => {
+    setItens((l) => [...l, item]);
+    return () => setItens((l) => l.filter((x) => x !== item));
   }, []);
+  return { itens, registrar };
+}
+
+export function ProvedorExportar({ registrar, children }) {
+  return <SlotExportar.Provider value={registrar}>{children}</SlotExportar.Provider>;
+}
+
+/** Um botão por conjunto registrado. Com um só, ele se chama "CSV". */
+export function BotoesExportar({ itens, nome }) {
+  const baixar = (item) => {
+    const conteudo = item.montar();
+    if (!conteudo) return;
+    exportarTabela({ nome: item.rotulo ? `${nome} - ${item.rotulo}` : nome, ...conteudo });
+  };
+  return itens.map((item, i) => (
+    <BotaoExportar
+      key={item.rotulo || i}
+      rotulo={itens.length > 1 && item.rotulo ? item.rotulo : 'CSV'}
+      titulo={`Exportar ${item.rotulo || nome} em CSV`}
+      onExportar={() => baixar(item)}
+    />
+  ));
+}
+
+export function Visual({ title, sub, children, flush = false, style, actions, className = 'v-grafico' }) {
+  const { itens, registrar } = useRegistroExportar();
 
   return (
     <section className={`visual ${className}`} style={style}>
@@ -38,14 +101,14 @@ export function Visual({ title, sub, children, flush = false, style, actions, cl
           <span className="titulo">
             <span>{title}</span>
             {actions}
-            {exportar && <BotaoExportar onExportar={() => exportar(title)} />}
+            <BotoesExportar itens={itens} nome={title} />
           </span>
           {sub && <span className="sub">{sub}</span>}
         </header>
       )}
-      <SlotExportar.Provider value={registrar}>
+      <ProvedorExportar registrar={registrar}>
         <div className={`body${flush ? ' flush' : ''}`}>{children}</div>
-      </SlotExportar.Provider>
+      </ProvedorExportar>
     </section>
   );
 }

@@ -12,7 +12,33 @@
 import { useEffect, useRef, useState } from 'react';
 import { CORES, corDoTexto } from './charts';
 import { Icone } from './Icone';
+import { BotoesExportar, ProvedorExportar, useExportavel, useRegistroExportar } from './ui';
 import { int, pct } from '../format';
+
+/**
+ * Estes visuais sao lista de dados desenhada com `div`, nao grafico: cada
+ * linha tem rotulo e numero, e e exatamente o que as pessoas querem levar
+ * para o Excel. Por isso todos se anunciam ao cabecalho em volta, igual a
+ * `Tabela`.
+ *
+ * O gancho vai SEMPRE no topo, antes do `return` de lista vazia que quase
+ * todos tem: hook depois de `return` condicional quebra a ordem dos hooks.
+ * Quando nao ha dado, o `montar` devolve `null` e o botao nem aparece.
+ */
+const COL_N = { key: 'n', titulo: 'Quantidade', fmt: int };
+const colPct = (titulo = '%') => ({ key: 'pct', titulo, fmt: (v) => (v === null || v === undefined ? '' : pct(v, 1)) });
+
+/**
+ * Colunas de "item / quantidade / %", com a do percentual só quando alguma
+ * linha tem um. Em várias listas o `pct` simplesmente não existe (os cartões de
+ * encerramento, por exemplo), e uma coluna inteira em branco no CSV é ruído que
+ * a pessoa precisa entender antes de apagar.
+ */
+const colunasItem = (linhas, rotuloPct = '%') => {
+  const temPct = linhas.some((i) => i.pct !== null && i.pct !== undefined);
+  const base = [{ key: 'chave', titulo: 'Item', fmt: (_v, d) => d.label || d.chave }, COL_N];
+  return temPct ? [...base, colPct(rotuloPct)] : base;
+};
 
 /** Cores de série, em ordem FIXA — a mesma sequência das outras telas. */
 export const SERIE = [
@@ -40,8 +66,12 @@ export const COR_FAMILIA = {
  * (status de atendimento), e sempre com legenda ao lado trazendo o número — a
  * fatia sozinha não deixa ninguém ler "20,0%".
  */
-export function Donut({ dados, tamanho = 132, aoClicar = null }) {
+export function Donut({ dados, tamanho = 132, aoClicar = null, nomeExport = null }) {
   const total = dados.reduce((s, d) => s + d.n, 0);
+  useExportavel(nomeExport, () => (total ? {
+    colunas: [{ key: 'chave', titulo: 'Item' }, COL_N, colPct('% do total')],
+    linhas: dados.map((d) => ({ ...d, pct: d.n / total })),
+  } : null));
   if (!total) return null;
   const cx = tamanho / 2;
   const cy = tamanho / 2;
@@ -129,8 +159,13 @@ export function Anel({ valor, cor = CORES.gold, tamanho = 92, rotulo = null }) {
  * como um filete e a comparação entre os primeiros — que é a que interessa —
  * desaparece. O percentual ao lado é que traz a proporção real.
  */
-export function ListaBarras({ itens, max = 12, corDe = null, mostrarPct = true, vazio = 'Sem dados no período' }) {
+export function ListaBarras({
+  itens, max = 12, corDe = null, mostrarPct = true, vazio = 'Sem dados no período', nomeExport = null,
+}) {
   const [tudo, setTudo] = useState(false);
+  // Exporta a lista INTEIRA, não só as `max` visíveis: o "mostrar os outros N"
+  // é limite de tela, não do dado — quem leva para a planilha quer tudo.
+  useExportavel(nomeExport, () => (itens?.length ? { colunas: colunasItem(itens), linhas: itens } : null));
   if (!itens?.length) return <div className="empty">{vazio}</div>;
 
   const visiveis = tudo ? itens : itens.slice(0, max);
@@ -171,7 +206,11 @@ export function ListaBarras({ itens, max = 12, corDe = null, mostrarPct = true, 
 
 // ---------------------------------------------------------------- funil
 /** Funil de etapas. Cada barra é a fração sobre a primeira etapa. */
-export function Funil({ etapas }) {
+export function Funil({ etapas, nomeExport = null }) {
+  useExportavel(nomeExport, () => (etapas?.length ? {
+    colunas: [{ key: 'chave', titulo: 'Etapa' }, COL_N, colPct('% do enviado')],
+    linhas: etapas,
+  } : null));
   if (!etapas?.length) return <div className="empty">Sem dados no período</div>;
   return (
     <div className="an-funil">
@@ -205,8 +244,18 @@ export function Funil({ etapas }) {
  * Cada linha é uma sequência distinta — e é literalmente o `group by tag` do
  * banco, sem processamento a mais: a combinação de tags *é* a jornada.
  */
-export function Jornada({ caminhos, max = 12 }) {
+export function Jornada({ caminhos, max = 12, nomeExport = null }) {
   const [tudo, setTudo] = useState(false);
+  // O caminho vira uma coluna só, com as tags separadas por " > " — a sequência
+  // é o dado, e uma coluna por passo daria largura variável a cada período.
+  useExportavel(nomeExport, () => (caminhos?.length ? {
+    colunas: [
+      { key: 'passos', titulo: 'Caminho', fmt: (v) => (v || []).map((p) => p.tag).join(' > ') },
+      { key: 'n', titulo: 'Vezes', fmt: int },
+      { key: 'status', titulo: 'Desfecho mais comum', fmt: (v) => v || '—' },
+    ],
+    linhas: caminhos,
+  } : null));
   if (!caminhos?.length) return <div className="empty">Nenhum caminho com tag no período</div>;
   const visiveis = tudo ? caminhos : caminhos.slice(0, max);
 
@@ -239,7 +288,15 @@ export function Jornada({ caminhos, max = 12 }) {
 
 // ---------------------------------------------------------------- pílulas
 /** Grupos com número e percentual — usado no perfil de recorrência. */
-export function Pilulas({ itens, base }) {
+export function Pilulas({ itens, base, nomeExport = null }) {
+  useExportavel(nomeExport, () => (itens?.length ? {
+    colunas: [
+      { key: 'chave', titulo: 'Grupo' },
+      COL_N,
+      { key: 'pct', titulo: '%', fmt: (_v, d) => (base ? pct(d.n / base, 1) : '—') },
+    ],
+    linhas: itens,
+  } : null));
   if (!itens?.length) return <div className="empty">Sem recorrência registrada no período</div>;
   return (
     <div className="an-pilulas">
@@ -268,6 +325,9 @@ export function Pilulas({ itens, base }) {
  * linhas explicam depois.
  */
 export function CartaoGrupo({ titulo, total, sub, itens, cor = CORES.primary, acoes = null, vazio }) {
+  // O cartão fica solto na seção, sem `Visual` em volta — quem recebe este
+  // registro é a `Secao`, e por isso o rótulo é o título do próprio cartão.
+  useExportavel(titulo, () => (itens?.length ? { colunas: colunasItem(itens), linhas: itens } : null));
   return (
     <section className="an-cartao" style={{ '--an-cartao-cor': cor }}>
       <header>
@@ -295,6 +355,10 @@ export function CartaoGrupo({ titulo, total, sub, itens, cor = CORES.primary, ac
 // ------------------------------------------------------------- efetividade
 /** Proporção principal com anel e a composição ao lado. */
 export function Proporcao({ titulo, valor, sub, blocos, cor = CORES.gold }) {
+  useExportavel(titulo, () => (blocos?.length ? {
+    colunas: [{ key: 'chave', titulo: 'Bloco' }, COL_N, colPct()],
+    linhas: blocos,
+  } : null));
   return (
     <section className="an-proporcao">
       <div className="an-prop-esq">
@@ -323,7 +387,19 @@ export function Proporcao({ titulo, valor, sub, blocos, cor = CORES.gold }) {
 
 // ------------------------------------------------------- barras de tempo
 /** Barras horizontais para uma medida de tempo por categoria. */
-export function BarrasTempo({ itens, fmt, campo = 'atendimentoSeg' }) {
+export function BarrasTempo({ itens, fmt, campo = 'atendimentoSeg', nomeExport = null }) {
+  useExportavel(nomeExport, () => {
+    const com = (itens || []).filter((i) => i[campo] !== null && i[campo] !== undefined && i[campo] > 0);
+    if (!com.length) return null;
+    return {
+      colunas: [
+        { key: 'chave', titulo: 'Item' },
+        { key: campo, titulo: 'Tempo', fmt: (v) => fmt(v) },
+        { key: 'n', titulo: 'Atendimentos', fmt: int },
+      ],
+      linhas: [...com].sort((a, b) => b[campo] - a[campo]),
+    };
+  });
   const comValor = (itens || []).filter((i) => i[campo] !== null && i[campo] !== undefined && i[campo] > 0);
   if (!comValor.length) return <div className="empty">Sem tempo registrado no período</div>;
   const ordenado = [...comValor].sort((a, b) => b[campo] - a[campo]);
@@ -353,7 +429,17 @@ export function BarrasTempo({ itens, fmt, campo = 'atendimentoSeg' }) {
 
 // ------------------------------------------------------------- ok / nok
 /** Uma linha por dia, com a divisão entre positivo e negativo. */
-export function BarraOkNok({ dias }) {
+export function BarraOkNok({ dias, nomeExport = null }) {
+  useExportavel(nomeExport, () => (dias?.length ? {
+    colunas: [
+      { key: 'label', titulo: 'Dia' },
+      { key: 'ok', titulo: 'OK', fmt: int },
+      { key: 'nok', titulo: 'NOK', fmt: int },
+      { key: 'total', titulo: 'Total', fmt: int },
+      { key: 'score', titulo: 'Score', fmt: (v) => pct(v, 1) },
+    ],
+    linhas: dias,
+  } : null));
   if (!dias?.length) return <div className="empty">Nenhuma resposta no período</div>;
   return (
     <div className="an-oknok">
@@ -381,7 +467,18 @@ export function BarraOkNok({ dias }) {
  * contas fixas sobre os números da tela, então o título diz "Leituras
  * automáticas" e o rodapé é explícito sobre a diferença.
  */
-export function Leituras({ itens }) {
+export function Leituras({ itens, nomeExport = null }) {
+  useExportavel(nomeExport, () => {
+    const com = (itens || []).filter((i) => i.valor > 0);
+    return com.length ? {
+      colunas: [
+        { key: 'titulo', titulo: 'Leitura' },
+        { key: 'texto', titulo: 'Observação' },
+        { key: 'gravidade', titulo: 'Tom', fmt: (v) => v || 'atenção' },
+      ],
+      linhas: com,
+    } : null;
+  });
   const comDado = (itens || []).filter((i) => i.valor > 0);
   if (!comDado.length) return <div className="empty">Nada a destacar no período</div>;
   return (
@@ -407,7 +504,11 @@ export function Leituras({ itens }) {
  * A cor é magnitude (um tom, claro → escuro) porque todas as barras medem a
  * mesma coisa; pintar cada hora de uma cor sugeriria categorias distintas.
  */
-export function ColunasHora({ horas, aoClicar = null }) {
+export function ColunasHora({ horas, aoClicar = null, nomeExport = null }) {
+  useExportavel(nomeExport, () => (horas?.length ? {
+    colunas: [{ key: 'label', titulo: 'Hora' }, { key: 'total', titulo: 'Atendimentos', fmt: int }],
+    linhas: horas,
+  } : null));
   if (!horas?.length) return <div className="empty">Sem entradas com hora no período</div>;
   const maior = Math.max(...horas.map((h) => h.total), 1);
   return (
@@ -445,11 +546,18 @@ export function ColunasHora({ horas, aoClicar = null }) {
  * os títulos de seção são o que devolve essa referência.
  */
 export function Secao({ titulo, sub, children }) {
+  // A seção também hospeda o slot: nem tudo aqui mora dentro de um `Visual` —
+  // os cartões de grupo e a proporção ficam soltos — e sem isto eles não teriam
+  // cabeçalho nenhum onde pendurar o botão.
+  const { itens, registrar } = useRegistroExportar();
   return (
     <div className="an-secao">
-      <h3>{titulo}</h3>
+      <h3>
+        {titulo}
+        <BotoesExportar itens={itens} nome={titulo} />
+      </h3>
       {sub && <p>{sub}</p>}
-      {children}
+      <ProvedorExportar registrar={registrar}>{children}</ProvedorExportar>
     </div>
   );
 }

@@ -13,32 +13,18 @@
  * 3. **A aba de datas configura o PEDIDO, não a carga.** Não há ETL aqui: as
  *    consultas vão direto ao banco com o período da tela. Ver `params.js`.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { apiAdmin } from '../api';
 import { useSession } from '../auth/session.jsx';
-import { exportarTabela } from '../components/exportar';
-import { Erro, Loading, useSlotExportar, Visual } from '../components/ui';
+import { Erro, Loading, useExportavel, Visual } from '../components/ui';
 import { Icone } from '../components/Icone';
 
-/**
- * As abas dividem um único `Visual`, mas só uma renderiza por vez — então o
- * slot de exportação do cabeçalho nunca tem dois donos ao mesmo tempo.
- *
- * Cada aba ignora o nome que o slot oferece (seria "Configurações" nas quatro)
- * e dá o seu: o arquivo precisa dizer o que é sem abrir.
+/*
+ * As quatro abas dividem um único `Visual`, mas só uma renderiza por vez —
+ * então o cabeçalho nunca mostra o botão de duas ao mesmo tempo. O rótulo que
+ * cada uma passa a `useExportavel` existe para o nome do arquivo: sem ele as
+ * quatro gerariam `configuracoes-<data>.csv`.
  */
-function useExportarAba(nome, montar) {
-  const registrar = useSlotExportar();
-  const montarRef = useRef(null);
-  montarRef.current = montar;
-  useEffect(() => {
-    if (!registrar) return undefined;
-    return registrar(() => {
-      const conteudo = montarRef.current();
-      if (conteudo) exportarTabela({ nome, ...conteudo });
-    });
-  }, [registrar, nome]);
-}
 
 const PAPEL_LABEL = { viewer: 'Visualizador', dev: 'DEV', admin: 'Administrador' };
 const PAPEL_AJUDA = {
@@ -76,7 +62,7 @@ function AbaUsuarios() {
 
   // Vale exportar: é a lista de quem tem acesso, que é o que se pede numa
   // auditoria. A coluna de ações não vai — botão não é dado.
-  useExportarAba('acessos-usuarios', () => {
+  useExportavel('usuarios', () => {
     const linhas = dados?.usuarios || [];
     if (!linhas.length) return null;
     return {
@@ -250,7 +236,7 @@ function AbaTelas() {
    * O gancho fica ANTES do retorno de carregamento: hook não pode ficar depois
    * de um `return` condicional.
    */
-  useExportarAba('acesso-por-tela', () => {
+  useExportavel('acesso por tela', () => {
     const lista = dados?.telas || [];
     const pessoas = dados?.pessoas || [];
     if (!lista.length || !pessoas.length) return null;

@@ -259,12 +259,20 @@ export function AnaliticoAtendimento() {
           <Card titulo="Canal e tipo de atendimento" consulta={consulta} vazio={!d?.porCanal?.length}>
             <div className="an-secao">
               <h3>Canal</h3>
-              <ListaBarras itens={d?.porCanal?.map((c) => ({ ...c, pct: k.total ? c.n / k.total : null }))} max={6} />
+              {/* Os dois `nomeExport` existem porque este cartao tem DOIS
+                  conjuntos: sem rotulo os botoes sairiam ambos como "CSV" e
+                  gerariam o mesmo nome de arquivo. */}
+              <ListaBarras
+                itens={d?.porCanal?.map((c) => ({ ...c, pct: k.total ? c.n / k.total : null }))}
+                max={6}
+                nomeExport="Canal"
+              />
               <h3>Tipo</h3>
               <ListaBarras
                 itens={d?.porTipo?.map((t) => ({ ...t, pct: k.total ? t.n / k.total : null }))}
                 max={6}
                 corDe={(_, i) => [CORES.gold, CORES.orange, CORES.primary, CORES.blue][i % 4]}
+                nomeExport="Tipo"
               />
             </div>
           </Card>

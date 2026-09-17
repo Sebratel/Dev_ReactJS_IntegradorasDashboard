@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { CORES, corDoTexto } from './charts';
-import { exportarTabela } from './exportar';
 import { Icone } from './Icone';
-import { useSlotExportar } from './ui';
+import { useExportavel } from './ui';
 
 /**
  * Tabela no estilo do Power BI (tableEx): cabeçalho fixo com linha dourada, barra de
@@ -12,7 +11,7 @@ import { useSlotExportar } from './ui';
  * `corFundo(linha)` devolve o hex do fundo — o texto é resolvido pela luminância,
  * nunca fixado em branco ou preto.
  */
-export function Tabela({ colunas, dados, ordemInicial, totais = null }) {
+export function Tabela({ colunas, dados, ordemInicial, totais = null, nomeExport = null }) {
   const [ordem, setOrdem] = useState(ordemInicial || null);
 
   const maximos = useMemo(() => {
@@ -42,22 +41,10 @@ export function Tabela({ colunas, dados, ordemInicial, totais = null }) {
     setOrdem((o) => (o?.key === key ? { key, dir: o.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'desc' }));
   };
 
-  /**
-   * Exportação: o cabeçalho do `Visual` desenha o botão, esta tabela entrega o
-   * conteúdo. Sai o que está na tela — a ordenação escolhida e a linha de
-   * totais, quando existe.
-   *
-   * O efeito registra UMA vez só, e os dados vão por `ref`. Colocar `colunas`
-   * ou `linhas` nas dependências seria um laço infinito: as telas montam esses
-   * arrays inline no JSX, então a identidade muda a cada render.
-   */
-  const registrar = useSlotExportar();
-  const conteudo = useRef(null);
-  conteudo.current = { colunas, linhas, totais };
-  useEffect(() => {
-    if (!registrar) return undefined;
-    return registrar((nome) => exportarTabela({ nome, ...conteudo.current }));
-  }, [registrar]);
+  // Exportação: o cabeçalho do `Visual` desenha o botão, esta tabela entrega o
+  // conteúdo. Sai o que está na tela — a ordenação escolhida e a linha de
+  // totais, quando existe.
+  useExportavel(nomeExport, () => (linhas.length ? { colunas, linhas, totais } : null));
 
   const classe = (c) => (c.align === 'left' ? 'left' : c.align === 'center' ? 'center' : 'right');
 

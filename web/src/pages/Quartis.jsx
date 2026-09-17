@@ -1,9 +1,7 @@
-import { useEffect, useRef } from 'react';
 import { useQuartis, useProdutividadeFiltros } from '../api';
 import { CORES, CORES_QUARTIL, corDoTexto } from '../components/charts';
-import { exportarTabela } from '../components/exportar';
 import { Filtro, FiltroPeriodo, usePeriodoPadrao, useFiltros } from '../components/SlicerBar';
-import { Erro, Loading, useSlotExportar, Vazio, Visual } from '../components/ui';
+import { Erro, Loading, useExportavel, Vazio, Visual } from '../components/ui';
 import { hmsSeg, int, pct } from '../format';
 
 /**
@@ -52,40 +50,33 @@ function CelulaQuartil({ q }) {
  * planilha de RH, saber de quem é a linha vale mais que economizar coluna.
  */
 function MatrizQuartis({ indicadores, colaboradores }) {
-  const registrar = useSlotExportar();
-  const conteudo = useRef(null);
-  conteudo.current = { indicadores, colaboradores };
-
-  useEffect(() => {
-    if (!registrar) return undefined;
-    return registrar((nome) => {
-      const { indicadores: inds, colaboradores: linhas } = conteudo.current;
-      const colunas = [
-        { key: 'colaborador', titulo: 'Colaborador' },
-        { key: 'email', titulo: 'E-mail', fmt: (v) => v || '—' },
-        {
-          key: 'indicadoresContados',
-          titulo: 'Indicadores na nota',
-          fmt: (_v, d) => `${d.indicadoresContados}/${d.indicadoresPossiveis}`,
-        },
-      ];
-      for (const i of inds) {
-        colunas.push({
-          key: i.campo,
-          titulo: i.rotulo + (i.peso === 0 ? ' *' : ''),
-          fmt: (v) => valorFormatado(v, i.formato),
-        });
-        colunas.push({
-          key: `quartil_${i.campo}`,
-          titulo: `${i.rotulo} (quartil)`,
-          fmt: (_v, d) => d.quartis?.[i.campo] || '—',
-        });
-      }
-      colunas.push({ key: 'notaFinal', titulo: 'Nota final', fmt: (v) => (v === null ? '—' : pct(v, 1)) });
-      colunas.push({ key: 'quartilFinal', titulo: 'Quartil final', fmt: (v) => v || '—' });
-      exportarTabela({ nome, colunas, linhas });
-    });
-  }, [registrar]);
+  useExportavel(null, () => {
+    if (!colaboradores.length) return null;
+    const colunas = [
+      { key: 'colaborador', titulo: 'Colaborador' },
+      { key: 'email', titulo: 'E-mail', fmt: (v) => v || '—' },
+      {
+        key: 'indicadoresContados',
+        titulo: 'Indicadores na nota',
+        fmt: (_v, d) => `${d.indicadoresContados}/${d.indicadoresPossiveis}`,
+      },
+    ];
+    for (const i of indicadores) {
+      colunas.push({
+        key: i.campo,
+        titulo: i.rotulo + (i.peso === 0 ? ' *' : ''),
+        fmt: (v) => valorFormatado(v, i.formato),
+      });
+      colunas.push({
+        key: `quartil_${i.campo}`,
+        titulo: `${i.rotulo} (quartil)`,
+        fmt: (_v, d) => d.quartis?.[i.campo] || '—',
+      });
+    }
+    colunas.push({ key: 'notaFinal', titulo: 'Nota final', fmt: (v) => (v === null ? '—' : pct(v, 1)) });
+    colunas.push({ key: 'quartilFinal', titulo: 'Quartil final', fmt: (v) => v || '—' });
+    return { colunas, linhas: colaboradores };
+  });
 
   return (
     <div className="tbl-wrap">

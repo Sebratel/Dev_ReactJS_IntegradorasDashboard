@@ -25,6 +25,26 @@
 .an-secao > h3::after {
   content: ''; flex: 1; height: 1px; background: var(--pbi-borda);
 }
+/**
+ * Botão de exportar no título da seção.
+ *
+ * O `.btn-exportar` do tema é branco sobre o cabeçalho escuro dos visuais; aqui
+ * o fundo é claro, e sem esta variante ele sumiria — branco sobre branco.
+ *
+ * O `order` existe porque a linha do título é um `::after`, e pseudo-elemento
+ * entra sempre por último: sem ele os botões ficariam colados no texto, com a
+ * linha esticando à direita deles. Assim a ordem fica título, linha, botões.
+ */
+.an-secao > h3 .btn-exportar {
+  order: 2;
+  background: #fff;
+  color: var(--pbi-primary);
+  border-color: var(--pbi-borda);
+  text-transform: none; letter-spacing: 0.2px;
+}
+.an-secao > h3 .btn-exportar:hover {
+  background: var(--pbi-primary); color: #fff; border-color: var(--pbi-primary);
+}
 .an-secao > p {
   margin: -4px 0 0; font-size: 12.5px; line-height: 1.55; color: #4d4b49; max-width: 78ch;
 }
