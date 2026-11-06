@@ -238,6 +238,18 @@ export function AnaliticoAtendimento() {
           vazio={!d?.jornada?.length}
         >
           <Jornada caminhos={d?.jornada} max={12} />
+          {/* O recorte precisa estar à vista: sem ele a lista passa por completa,
+              e quem procura um caminho pequeno conclui que ele não existe. */}
+          {d?.jornadaResumo?.caminhos > d?.jornadaResumo?.mostrados && (
+            <Aviso tom="neutro">
+              Esta lista mostra os <b>{int(d.jornadaResumo.mostrados)}</b> caminhos mais
+              frequentes, de <b>{int(d.jornadaResumo.caminhos)}</b> combinações distintas no
+              período — os outros {int(d.jornadaResumo.caminhos - d.jornadaResumo.mostrados)}{' '}
+              somam {int(d.jornadaResumo.atendimentos - d.jornadaResumo.atendimentosMostrados)}{' '}
+              atendimentos e ficam de fora, aqui e no CSV. Para contar um assunto inteiro, use
+              os cartões de motivo e de encerramento, que somam todas as combinações.
+            </Aviso>
+          )}
         </Card>
 
         <div className="grid linha-dupla">

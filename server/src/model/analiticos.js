@@ -173,6 +173,7 @@ export async function atendimento(filtros) {
     marketing: tags.marketing,
     motivos: tags.motivos,
     jornada: tags.jornada,
+    jornadaResumo: tags.jornadaResumo,
     tagsPorFamilia: tags.porFamilia,
 
     porRecorrencia,
@@ -214,6 +215,13 @@ export async function atendimento(filtros) {
  * tag. Uma passagem só sobre algumas centenas de linhas — ver o cabeçalho de
  * `tags.js` para a medição que justificou fazer assim.
  */
+/**
+ * Quantos caminhos da jornada atravessam para a tela. O resto é cauda: em
+ * outubro de 2026 o mês teve 338 combinações distintas, e estas 40 cobriam a
+ * maior parte do volume. O `jornadaResumo` abaixo informa o que ficou de fora.
+ */
+const TETO_JORNADA = 40;
+
 function agregarTags(linhas, total) {
   const contar = (mapa, chave, n) => mapa.set(chave, (mapa.get(chave) || 0) + n);
 
@@ -267,6 +275,9 @@ function agregarTags(linhas, total) {
     .map(([chave, n]) => ({ chave, n, pct: base ? n / base : null }))
     .sort((a, b) => b.n - a.n);
 
+  // ordenada uma vez só: a jornada usa o topo e o resumo precisa do total
+  const ordenadas = [...jornadas.values()].sort((a, b) => b.n - a.n);
+
   return {
     semTag,
     passouSuporte,
@@ -299,9 +310,8 @@ function agregarTags(linhas, total) {
       })),
     },
     porFamilia: lista(porFamilia, null),
-    jornada: [...jornadas.values()]
-      .sort((a, b) => b.n - a.n)
-      .slice(0, 40)
+    jornada: ordenadas
+      .slice(0, TETO_JORNADA)
       .map((j) => {
         const dominante = [...j.status.entries()].sort((a, b) => b[1] - a[1])[0];
         return {
@@ -310,6 +320,20 @@ function agregarTags(linhas, total) {
           status: dominante?.[0] || null,
         };
       }),
+    /**
+     * O que o teto deixou de fora, para a tela poder dizer.
+     *
+     * Sem isto a Jornada parece a lista completa dos caminhos, e não é: um mês
+     * típico tem algumas centenas de combinações distintas e só as 40 maiores
+     * saem daqui. Quem procura um caminho pequeno — um transbordo específico,
+     * por exemplo — não o encontra e conclui que ele não existe.
+     */
+    jornadaResumo: {
+      caminhos: ordenadas.length,
+      mostrados: Math.min(TETO_JORNADA, ordenadas.length),
+      atendimentos: ordenadas.reduce((s, j) => s + j.n, 0),
+      atendimentosMostrados: ordenadas.slice(0, TETO_JORNADA).reduce((s, j) => s + j.n, 0),
+    },
   };
 }
 
