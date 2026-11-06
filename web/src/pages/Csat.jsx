@@ -23,31 +23,49 @@ import { dataBr, horaBr, int, pct } from '../format';
 /** A resposta vem como "Satisfeito ##1f60a##": o sufixo é o emoji codificado. */
 const semEmoji = (v) => String(v ?? '').replace(/\s*##[0-9a-f]+##\s*/gi, '').trim() || '—';
 
-function TabelaRespostas({ consulta }) {
+const quando = { key: 'dat_resposta', titulo: 'Resposta', align: 'left', fmt: (v) => `${dataBr(v)} ${horaBr(v)}` };
+
+const COLUNAS_MATRIX = [
+  quando,
+  { key: 'nom_agente', titulo: 'Agente', align: 'left', largura: 180 },
+  { key: 'nom_pergunta', titulo: 'Pergunta', align: 'left', largura: 300 },
+  { key: 'nom_resposta', titulo: 'Resposta', align: 'left', fmt: semEmoji },
+  { key: 'nom_valor', titulo: 'Nota', align: 'center' },
+  { key: 'nom_conta', titulo: 'Conta', align: 'left' },
+  { key: 'nom_tipo_integracao', titulo: 'Canal', align: 'left' },
+  { key: 'num_protocolo', titulo: 'Protocolo', align: 'left' },
+];
+
+/**
+ * A pesquisa da URA não tem texto de resposta nem conta: tem a nota e a perna da
+ * ligação. Numa transferência a mesma nota aparece uma vez por ramal, e é assim
+ * que a tabela mostra — cada agente que atendeu a ligação vê a nota dela.
+ */
+const COLUNAS_NATIVE = [
+  { ...quando, titulo: 'Ligação' },
+  { key: 'nom_agente', titulo: 'Agente', align: 'left', largura: 200 },
+  { key: 'fila', titulo: 'Fila', align: 'left', largura: 220 },
+  { key: 'sentido', titulo: 'Sentido', align: 'left' },
+  { key: 'nom_pergunta', titulo: 'Pergunta', align: 'left' },
+  { key: 'nom_valor', titulo: 'Nota', align: 'center' },
+  { key: 'desconexao', titulo: 'Desconexão', align: 'left' },
+  { key: 'ramal', titulo: 'Ramal', align: 'left' },
+  { key: 'num_protocolo', titulo: 'Protocolo', align: 'left' },
+];
+
+function TabelaRespostas({ consulta, colunas }) {
   if (consulta.isLoading) return <Loading />;
   if (consulta.isError) return <Erro erro={consulta.error} />;
   if (!consulta.data?.length) return <Vazio texto="Nenhuma resposta de pesquisa no período" />;
-  return (
-    <Tabela
-      dados={consulta.data}
-      colunas={[
-        { key: 'dat_resposta', titulo: 'Resposta', align: 'left', fmt: (v) => `${dataBr(v)} ${horaBr(v)}` },
-        { key: 'nom_agente', titulo: 'Agente', align: 'left', largura: 180 },
-        { key: 'nom_pergunta', titulo: 'Pergunta', align: 'left', largura: 300 },
-        { key: 'nom_resposta', titulo: 'Resposta', align: 'left', fmt: semEmoji },
-        { key: 'nom_valor', titulo: 'Nota', align: 'center' },
-        { key: 'nom_conta', titulo: 'Conta', align: 'left' },
-        { key: 'nom_tipo_integracao', titulo: 'Canal', align: 'left' },
-        { key: 'num_protocolo', titulo: 'Protocolo', align: 'left' },
-      ]}
-    />
-  );
+  return <Tabela dados={consulta.data} colunas={colunas} />;
 }
 
 /**
- * Aviso de base parada. Recorte invisível gera chamado: sem isto, quem abre a tela
- * do CSAT Native vê tudo vazio e conclui que o dashboard está quebrado. As datas
- * vêm do dado — se a coleta voltar, o aviso some sozinho.
+ * Aviso de período fora da coleta. Recorte invisível gera chamado: sem isto, quem
+ * abre a tela vê tudo vazio e conclui que o dashboard está quebrado. Cobre os dois
+ * lados — período depois da última coleta e período que começa antes do início da
+ * pesquisa (a da URA do Native começou em 01/09/2026). As datas vêm do dado, então
+ * o aviso some sozinho quando deixa de valer.
  *
  * Ele mede a própria altura e a devolve para `--h-aviso`, de onde sai `--util`: o
  * texto quebra em mais linhas em tela estreita, então altura fixa no CSS deixava
@@ -55,24 +73,36 @@ function TabelaRespostas({ consulta }) {
  */
 function AvisoCobertura({ cobertura, de, ate }) {
   const ref = useRef(null);
-  const mostrar = Boolean(cobertura?.ate) && cobertura.ate.slice(0, 10) < de;
+  const primeira = cobertura?.de?.slice(0, 10);
+  const ultima = cobertura?.ate?.slice(0, 10);
+  const depoisDaColeta = Boolean(ultima) && ultima < de;
+  const antesDaPesquisa = !depoisDaColeta && Boolean(primeira) && de < primeira;
+  const mostrar = depoisDaColeta || antesDaPesquisa;
   useAlturaNoCromo(ref, '--h-aviso', mostrar);
 
   if (!mostrar) return null;
+  const periodo = `${dataBr(`${de}T00:00:00`)} a ${dataBr(`${ate}T00:00:00`)}`;
   return (
     <div className="aviso-recorte" ref={ref}>
       <Icone nome="alerta" tamanho={15} />
-      <span>
-        A base de avaliações tem <b>{int(cobertura.registros)}</b> registros e o mais recente é de{' '}
-        <b>{dataBr(cobertura.ate)}</b> — nada foi coletado depois disso. O período selecionado
-        ({dataBr(`${de}T00:00:00`)} a {dataBr(`${ate}T00:00:00`)}) fica fora dessa janela, então os
-        indicadores de pesquisa aparecem vazios.
-      </span>
+      {depoisDaColeta ? (
+        <span>
+          A base de avaliações tem <b>{int(cobertura.registros)}</b> registros e o mais recente é de{' '}
+          <b>{dataBr(cobertura.ate)}</b> — nada foi coletado depois disso. O período selecionado
+          ({periodo}) fica fora dessa janela, então os indicadores de pesquisa aparecem vazios.
+        </span>
+      ) : (
+        <span>
+          A pesquisa começou em <b>{dataBr(cobertura.de)}</b>. O período selecionado ({periodo})
+          começa antes disso: nesses dias não há avaliação, então nota e adesão ficam vazias — não
+          é queda de satisfação.
+        </span>
+      )}
     </div>
   );
 }
 
-function PaginaCsat({ qual, titulo, subtitulo, colunas, linhas, filtrosDaTela }) {
+function PaginaCsat({ qual, titulo, subtitulo, colunas, linhas, filtrosDaTela, colunasTabela }) {
   const padrao = usePeriodoPadrao();
   const { valores, definir, definirVarios, limpar, lista, temFiltro } = useFiltros({
     de: padrao.de, ate: padrao.ate, granularidade: 'dia',
@@ -146,7 +176,7 @@ function PaginaCsat({ qual, titulo, subtitulo, colunas, linhas, filtrosDaTela })
       </Visual>
 
       <Visual className="v-tabela" title="Relatório detalhado" sub="Respostas da pesquisa de satisfação no período" flush>
-        <TabelaRespostas consulta={detalhado} />
+        <TabelaRespostas consulta={detalhado} colunas={colunasTabela} />
       </Visual>
     </div>
   );
@@ -171,6 +201,7 @@ export function CsatMatrix() {
         { chave: 'servico', nome: 'Fila' },
         { chave: 'pergunta', nome: 'CSAT' },
       ]}
+      colunasTabela={COLUNAS_MATRIX}
     />
   );
 }
@@ -180,7 +211,7 @@ export function CsatNative() {
     <PaginaCsat
       qual="csat-native"
       titulo="CSAT Native"
-      subtitulo="Principais perguntas da pesquisa de satisfação do Native Infinity"
+      subtitulo="Pesquisa da URA ao fim da ligação (nota de 1 a 5) — mesma régua de nota e adesão do Matrix"
       colunas={[
         { key: 'atendidas', nome: 'Atendidas', cor: CORES.gold },
         { key: 'respostas', nome: 'Respostas CSAT', cor: CORES.primary },
@@ -192,8 +223,9 @@ export function CsatNative() {
       filtrosDaTela={[
         { chave: 'sentido', nome: 'Sentido' },
         { chave: 'fila', nome: 'Fila' },
-        { chave: 'resposta', nome: 'CSAT' },
+        { chave: 'nota', nome: 'Nota' },
       ]}
+      colunasTabela={COLUNAS_NATIVE}
     />
   );
 }

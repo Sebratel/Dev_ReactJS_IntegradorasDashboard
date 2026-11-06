@@ -57,7 +57,7 @@ export const TELAS = [
   { id: 'geral-matrix', relatorio: 'Geral', curto: 'Matrix', label: 'Geral · Matrix', rota: '/geral/matrix', descricao: 'Indicadores do MatrixGO: atendimentos, TMA e TME medianos, faixas de espera' },
   { id: 'geral-csat-matrix', relatorio: 'Geral', curto: 'CSAT Matrix', label: 'Geral · CSAT Matrix', rota: '/geral/csat-matrix', descricao: 'Pesquisa de satisfação e adesão do MatrixGO' },
   { id: 'geral-native', relatorio: 'Geral', curto: 'Native', label: 'Geral · Native', rota: '/geral/native', descricao: 'Indicadores do Native Infinity: atendimentos, TMA, TME e perdidas' },
-  { id: 'geral-csat-native', relatorio: 'Geral', curto: 'CSAT Native', label: 'Geral · CSAT Native', rota: '/geral/csat-native', descricao: 'Pesquisa de satisfação do Native (base parada desde 04/12/2025)' },
+  { id: 'geral-csat-native', relatorio: 'Geral', curto: 'CSAT Native', label: 'Geral · CSAT Native', rota: '/geral/csat-native', descricao: 'Pesquisa de satisfação da URA do Native (desde 01/09/2026)' },
   { id: 'geral-produtividade', relatorio: 'Geral', curto: 'Produtiv.', label: 'Geral · Produtividade', rota: '/geral/produtividade', descricao: 'Desempenho individual por agente nas três frentes (dado sensível)' },
   { id: 'geral-quartis', relatorio: 'Geral', curto: 'Quartis', label: 'Geral · Quartis', rota: '/geral/quartis', descricao: 'Nota final e classificação por quartil de cada colaborador (dado sensível)' },
   // SUP — Indicadores Suporte

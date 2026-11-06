@@ -96,7 +96,7 @@ export function filtrosDaQuery(req) {
     cidade: req.query.cidade,
     // CSAT
     pergunta: req.query.pergunta,
-    resposta: req.query.resposta,
+    nota: req.query.nota,
     // comum às duas
     agente: req.query.agente,
   };

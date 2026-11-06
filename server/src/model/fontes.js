@@ -10,8 +10,8 @@
  * Cada consulta é um `max()` sobre a coluna de data. Uma falha em qualquer uma
  * NÃO derruba a capa: a fonte aparece marcada como indisponível, e é assim que a
  * pessoa descobre que a base parou em vez de achar que o número está errado.
- * (A base de CSAT do Native, por exemplo, parou em 04/12/2025 — isto é o que faz
- * esse fato aparecer na capa.)
+ * (A base de CSAT do Native, por exemplo, ficou parada de 04/12/2025 até a troca
+ * para o relatório 107 em 06/11/2026 — foi por aqui que esse fato aparecia na capa.)
  */
 import { query } from '../db/maria.js';
 
@@ -35,13 +35,13 @@ const FONTES = [
     sql: 'select max(dat_resposta) u from API_WebDeveloper.db_matrix_avaliations',
   },
   {
-    // A que mais importa aparecer: parou de receber registros em 04/12/2025, com
-    // 44 linhas no total. Sem mostrá-la na capa, a tela de CSAT Native parece
-    // simplesmente vazia — e "vazio" é lido como queda de satisfação.
+    // Pesquisa da URA (relatório 107), gravada pelo n8n a cada 15 min. A tabela
+    // guarda também 44 linhas antigas da pesquisa do Matrix (dez/2025): sem filtrar
+    // a origem, a capa mediria a fonte errada.
     id: 'csatNative',
     nome: 'Avaliações CSAT (Native)',
     relatorio: 'Geral',
-    sql: 'select max(dat_resposta) u from API_WebDeveloper.db_native_avaliations',
+    sql: "select max(dat_resposta) u from API_WebDeveloper.db_native_avaliations where origem = 'native_relatorio_107'",
   },
   {
     id: 'atendimentoAnalitico',

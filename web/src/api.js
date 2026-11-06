@@ -253,7 +253,7 @@ export function useQuartis(filtros) {
   return useQuery({ queryKey: ['quartis', filtros], queryFn: () => apiGet('/quartis', filtros) });
 }
 
-/** Janela em que a base de avaliações tem dado — a do Native parou em dez/2025. */
+/** Janela em que a base de avaliações tem dado (no Native, a pesquisa da URA começa em 01/09/2026). */
 export function useCsatCobertura(qual) {
   return useQuery({
     queryKey: [qual, 'cobertura'],

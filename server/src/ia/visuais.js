@@ -106,10 +106,12 @@ export const VISUAIS = {
   'geral-csat-native:serie': {
     tela: 'geral-csat-native',
     titulo: 'CSAT Native',
-    oQueE: 'Pesquisa de satisfação do Native por período, na mesma forma da do Matrix. ATENÇÃO: '
-      + 'a base de avaliações do Native parou de receber registros em 04/12/2025 e tem apenas 44 '
-      + 'linhas no total — período recente vem vazio por falta de coleta, não por falta de '
-      + 'satisfação. Não trate ausência de dado como queda de nota.',
+    oQueE: 'Pesquisa de satisfação da URA do Native (nota de 1 a 5 ao fim da ligação) por período, '
+      + 'com a mesma régua do CSAT Matrix. `nota` é a proporção de respostas entre 3 e 5 sobre o '
+      + 'total respondido (0 a 1). `adesao` é a razão entre protocolos avaliados e ligações '
+      + 'atendidas (0 a 1) — mede quanta gente respondeu, não a nota. A pesquisa começou em '
+      + '01/09/2026: antes disso `nota` e `adesao` vêm nulas por não haver coleta, não por falta '
+      + 'de satisfação.',
     montar: (f) => csat.serieNative(f),
     recorte: (d) => ({ serie: serieEnxuta(d) }),
   },
