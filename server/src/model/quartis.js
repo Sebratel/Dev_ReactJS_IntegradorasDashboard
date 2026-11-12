@@ -1,6 +1,6 @@
 import { query as maria } from '../db/maria.js';
 import { query as pg } from '../db/pg.js';
-import { mapaAgentes } from './agentes.js';
+import { mapaAgentes, chaveEmail } from './agentes.js';
 import * as produtividade from './produtividade.js';
 
 const A = 'API_WebDeveloper';
@@ -17,9 +17,7 @@ const A = 'API_WebDeveloper';
  *  - quartil vira percentual de entrega: Q1=100%, Q2=75%, Q3=50%, Q4=25%;
  *  - Nota Final = Σ(entrega × peso) / Σ(peso dos indicadores COM dado e peso > 0).
  *
- * Divergência: TMA/TME entram como MEDIANA, decisão tomada para o dashboard todo.
- * Com média, quem esquece conversa aberta no MatrixGO cai de quartil por isso e não
- * por lentidão no atendimento (7% das conversas passam de 24h).
+ * TMA/TME entram como MÉDIA (DN-01, QA de 27/10/2026), como no Power BI.
  */
 
 /** Cores por quartil, iguais às medidas `Cor_*` do modelo. */
@@ -127,18 +125,52 @@ async function protocolosElleven(periodo) {
     [periodo.de, periodo.ate],
   );
   const mapa = new Map();
-  for (const r of rows) mapa.set(r.email, Number(r.n) || 0);
+  for (const r of rows) {
+    const chave = chaveEmail(r.email);
+    mapa.set(chave, (mapa.get(chave) || 0) + (Number(r.n) || 0));
+  }
   return mapa;
+}
+
+/**
+ * Denominador da adesão Elleven: atendimentos Matrix + atendidas Native (não perdidas,
+ * DN-03) do agente no período, SEM os filtros da tela — como a #adesaoprot_BLIND do
+ * Power BI, para o ranking não mudar com o recorte (D-04). Chave: nome bruto da plataforma.
+ */
+async function atendimentosBlind(periodo) {
+  const [m, n] = await Promise.all([
+    maria(
+      `select atendente, count(protocolo) n from ${A}.db_matrix
+        where data_atendimento >= ? and data_atendimento < ? and data_atendimento <> ''
+          and atendente <> '' and atendente <> 'null'
+        group by atendente`,
+      [periodo.de, periodo.ate],
+    ),
+    maria(
+      `select agente, count(case when coalesce(perdida, 0) = 0 then protocolo end) n
+         from ${A}.db_native
+        where data_hora >= ? and data_hora < ? and agente <> '' and agente <> 'null'
+        group by agente`,
+      [periodo.de, periodo.ate],
+    ),
+  ]);
+  return { matrix: m.rows, native: n.rows };
 }
 
 export async function tabela(filtros) {
   const periodo = { de: filtros.de, ate: filtros.ate };
 
-  const [linhasMatrix, linhasNative, csatMatrixPorBruto, ellevenPorEmail, config, mapa] = await Promise.all([
-    produtividade.matrix(filtros),
+  // CSAT Matrix dos quartis: só a pergunta do atendimento, salvo escolha na tela (DN-09, D-03)
+  const perguntaCsat = filtros.pergunta && String(filtros.pergunta).trim()
+    ? filtros.pergunta
+    : [produtividade.PERGUNTA_ATENDIMENTO];
+
+  const [linhasMatrix, linhasNative, csatMatrixPorBruto, ellevenPorEmail, blind, config, mapa] = await Promise.all([
+    produtividade.matrix(filtros, { pergunta: perguntaCsat }),
     produtividade.native(filtros),
     adesaoCsatMatrix(periodo),
     protocolosElleven(periodo),
+    atendimentosBlind(periodo),
     pesos(),
     mapaAgentes(),
   ]);
@@ -169,19 +201,37 @@ export async function tabela(filtros) {
     a.atendimentosNative = r.atendimentos;
   }
 
-  // adesão CSAT Matrix: precisa voltar do nome bruto para o agente canônico
+  // adesão CSAT Matrix: volta do nome bruto para o agente canônico e SOMA os perfis
+  // antes de dividir (D-09: agente com dois nomes no Matrix ficava só com o último)
+  const adesaoCsat = new Map();
   for (const [bruto, v] of csatMatrixPorBruto) {
     const ag = mapa.porAtendenteMatrix.get(bruto);
     const chave = ag ? ag.email : `bruto:${bruto}`;
+    const acc = adesaoCsat.get(chave) || { finalizados: 0, avaliados: 0 };
+    acc.finalizados += v.finalizados;
+    acc.avaliados += v.avaliados;
+    adesaoCsat.set(chave, acc);
+  }
+  for (const [chave, v] of adesaoCsat) {
     const alvo = porEmail.get(chave);
     if (alvo && v.finalizados) alvo.adesaoCsatMatrix = v.avaliados / v.finalizados;
   }
 
-  // adesão Elleven: protocolos abertos ÷ atendimentos feitos nos dois sistemas,
-  // como a medida #adesaoprot do modelo
-  for (const a of porEmail.values()) {
-    const protocolos = a.email ? ellevenPorEmail.get(a.email) || 0 : 0;
-    const atendimentos = (a.atendimentosMatrix || 0) + (a.atendimentosNative || 0);
+  // adesão Elleven: protocolos abertos ÷ atendimentos dos dois sistemas, sem os filtros
+  // da tela (#adesaoprot_BLIND do modelo, D-04)
+  const atendimentosSemFiltro = new Map();
+  const somaAtend = (chave, n) => atendimentosSemFiltro.set(chave, (atendimentosSemFiltro.get(chave) || 0) + (Number(n) || 0));
+  for (const r of blind.matrix) {
+    const ag = mapa.porAtendenteMatrix.get(r.atendente);
+    somaAtend(ag ? ag.email : `bruto:${r.atendente}`, r.n);
+  }
+  for (const r of blind.native) {
+    const ag = mapa.porAgenteNative.get(r.agente);
+    somaAtend(ag ? ag.email : `bruto:${r.agente}`, r.n);
+  }
+  for (const [chave, a] of porEmail) {
+    const protocolos = a.email ? ellevenPorEmail.get(chaveEmail(a.email)) || 0 : 0;
+    const atendimentos = atendimentosSemFiltro.get(chave) || 0;
     a.protocolosElleven = protocolos;
     a.adesaoElleven = atendimentos ? protocolos / atendimentos : null;
   }

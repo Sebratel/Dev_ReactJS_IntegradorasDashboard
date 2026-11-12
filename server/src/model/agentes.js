@@ -13,6 +13,13 @@ let cachedAt = 0;
  * pelas APIs próprias de cada plataforma. Mesma ponte de 3 saltos do modelo Power BI
  * original: allUsers.email <-> agentesMatrix.login / usersNative.email.
  */
+/**
+ * E-mail como chave da ponte: sem diferença de maiúsculas nem espaços (D-07). O Power
+ * BI compara sem diferenciar maiúsculas; aqui um agente ficava sem dono quando o login
+ * do Matrix e o e-mail do Voalle diferiam só na caixa.
+ */
+export const chaveEmail = (email) => (email ? String(email).trim().toLowerCase() : '');
+
 export async function mapaAgentes() {
   if (cache && Date.now() - cachedAt < TTL_MS) return cache;
 
@@ -25,11 +32,12 @@ export async function mapaAgentes() {
 
   const porEmail = new Map();
   for (const u of usuarios.rows) {
-    if (u.email && !porEmail.has(u.email)) porEmail.set(u.email, { email: u.email, name: u.name });
+    const chave = chaveEmail(u.email);
+    if (chave && !porEmail.has(chave)) porEmail.set(chave, { email: chave, name: u.name });
   }
 
   for (const c of colaboradores.rows) {
-    const agente = porEmail.get(c.email);
+    const agente = porEmail.get(chaveEmail(c.email));
     if (agente) {
       agente.team = c.team;
       agente.operationalBase = c.operational_base;
@@ -38,13 +46,13 @@ export async function mapaAgentes() {
 
   const porAtendenteMatrix = new Map();
   for (const m of matrix) {
-    const agente = porEmail.get(m.login);
+    const agente = porEmail.get(chaveEmail(m.login));
     if (agente) porAtendenteMatrix.set(m.agente, agente);
   }
 
   const porAgenteNative = new Map();
   for (const n of native) {
-    const agente = porEmail.get(n.email);
+    const agente = porEmail.get(chaveEmail(n.email));
     if (agente) porAgenteNative.set(n.name, agente);
   }
 

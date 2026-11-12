@@ -81,12 +81,10 @@ async function condicoes(filtros) {
  * A própria tabela de faixas do relatório se contradiz ali: a coluna soma
  * protocolos enquanto o percentual conta linhas.
  *
- * TMA/TME são MEDIANAS, não médias. No MatrixGO `data_finalizacao` é quando alguém
- * fecha a conversa, não quando o atendimento acaba: em agosto a mediana foi de 26
- * min, a média 6h34, e 7% das conversas passaram de 24 horas. A média descreve o
- * hábito de esquecer conversa aberta, não o atendimento. (No Native é diferente e
- * lá a média vale: `espera`/`atendimento` são durações de ligação, que terminam
- * sozinhas.)
+ * TMA/TME são MÉDIAS (DN-01, QA de 27/10/2026): é o que a plataforma Matrix e o
+ * Power BI mostram (conferido no QA contra o relatório estatístico do Matrix). A mediana foi
+ * usada antes para não pesar conversa esquecida aberta, mas a decisão do negócio foi
+ * padronizar com a plataforma.
  */
 export async function serie(filtros) {
   const { sql: onde, params } = await condicoes(filtros);
@@ -95,21 +93,15 @@ export async function serie(filtros) {
     ? "DATE_FORMAT(data_atendimento, '%Y-%m-%d')"
     : "DATE_FORMAT(data_atendimento, '%Y-%m')";
 
-  // PERCENTILE_CONT é função de janela (uma linha por linha de entrada), por isso o
-  // DISTINCT: com todas as colunas calculadas sobre a mesma janela, sobra uma linha
-  // por período e a tabela é varrida uma vez só. A janela vai inline em cada uma —
-  // o PERCENTILE_CONT do MariaDB não aceita janela nomeada (`over j` dá erro de
-  // sintaxe).
-  const janela = `over (partition by ${chave})`;
   const { rows } = await query(
-    `select distinct
-            ${chave} as periodo,
-            count(protocolo) ${janela}                            as atendimentos,
-            sum(case when status = 6 then 1 else 0 end) ${janela} as transferidas,
-            percentile_cont(0.5) within group (order by ${TMA_SEG}) ${janela} as tma_seg,
-            percentile_cont(0.5) within group (order by ${TME_SEG}) ${janela} as tme_seg
+    `select ${chave} as periodo,
+            count(protocolo)                             as atendimentos,
+            sum(case when status = 6 then 1 else 0 end)  as transferidas,
+            avg(${TMA_SEG})                              as tma_seg,
+            avg(${TME_SEG})                              as tme_seg
        from ${TABELA}
       where ${onde}
+      group by periodo
       order by periodo`,
     params,
   );

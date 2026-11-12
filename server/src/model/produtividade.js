@@ -9,7 +9,7 @@ const A = 'API_WebDeveloper';
  * contagem somam colunas de ID (`Sum(db_matrix.codigo)` em "atendimentos",
  * `Sum(allProtocolsVoalle.protocol_number)` em "protocolos"). Aqui cada coluna faz o
  * que o rótulo promete:
- *   - TMA/TME: mediana (mesma decisão das telas de indicadores);
+ *   - TMA/TME: MÉDIA (DN-01, QA de 27/10/2026), como a plataforma Matrix e o Power BI;
  *   - atendimentos/protocolos: contagem;
  *   - tempo logado/pausado: média DIÁRIA, que é o que as medidas
  *     `#Tempo_Logado_*_Media_Diaria` do modelo calculam (soma dos segundos dividida
@@ -30,9 +30,10 @@ function filtroIn(coluna, valores, where, params) {
 }
 
 /**
- * Dobra as linhas por agente canônico. Três pessoas têm dois perfis no Native (uma
- * troca de setor), então os totais somam; para a mediana fica a do perfil com mais
- * atendimentos, que é o representativo.
+ * Dobra as linhas por agente canônico. Há pessoas com dois perfis na plataforma (troca
+ * de setor, usuário duplicado), então tudo soma: atendimentos, segundos e a soma/contagem
+ * de TMA e TME, que só viram média no fim (QT-16: a média é das ligações de todos os
+ * perfis, como o Power BI faz).
  */
 function porAgente(linhas, mapa, chaveBruta) {
   const saida = new Map();
@@ -45,12 +46,8 @@ function porAgente(linhas, mapa, chaveBruta) {
     if (!atual) {
       saida.set(chave, { email: agente?.email || null, agente: nome, equipe: agente?.team || null, ...linha });
     } else {
-      const novoMaior = (linha.atendimentos || 0) > (atual.atendimentos || 0);
       atual.atendimentos = (atual.atendimentos || 0) + (linha.atendimentos || 0);
-      for (const campo of ['tmaSeg', 'tmeSeg']) {
-        if (novoMaior && linha[campo] != null) atual[campo] = linha[campo];
-      }
-      for (const campo of ['segLogado', 'segPausado', 'respostas', 'boas']) {
+      for (const campo of ['tmaSoma', 'tmaN', 'tmeSoma', 'tmeN', 'segLogado', 'segPausado', 'respostas', 'boas']) {
         if (linha[campo] != null) atual[campo] = (atual[campo] || 0) + linha[campo];
       }
     }
@@ -59,10 +56,18 @@ function porAgente(linhas, mapa, chaveBruta) {
 }
 
 const num = (v) => (v === null || v === undefined ? null : Number(v));
+const media = (soma, n) => (n ? Math.round(soma / n) : null);
+
+/** Pergunta do CSAT Matrix que entra nos QUARTIS (DN-09). */
+export const PERGUNTA_ATENDIMENTO = 'Como você se sentiu em relação ao atendimento da pessoa que falou com você?';
 
 // ---------------------------------------------------------------------- MATRIX
 
-export async function matrix(filtros) {
+/**
+ * `opcoes.pergunta`: limita o CSAT a essas perguntas. A tela PRODUTIVIDADE usa todas,
+ * como o Power BI; os QUARTIS passam só a do atendimento (DN-09).
+ */
+export async function matrix(filtros, opcoes = {}) {
   // `atendente`/`agente` guardam a STRING 'null' em atendimento sem gente (bot,
   // automação): 37 mil linhas no Matrix. Não é agente e não pode virar linha da tabela.
   const where = ['data_atendimento >= ?', 'data_atendimento < ?', "data_atendimento <> ''",
@@ -78,22 +83,28 @@ export async function matrix(filtros) {
 
   const [atend, csat, login, stops] = await Promise.all([
     maria(
-      `select distinct atendente,
-              count(protocolo) over (partition by atendente) as atendimentos,
-              percentile_cont(0.5) within group (order by ${TMA}) over (partition by atendente) as tma,
-              percentile_cont(0.5) within group (order by ${TME}) over (partition by atendente) as tme
-         from ${A}.db_matrix where ${onde}`,
+      `select atendente,
+              count(protocolo) as atendimentos,
+              sum(${TMA}) as tma_soma, count(${TMA}) as tma_n,
+              sum(${TME}) as tme_soma, count(${TME}) as tme_n
+         from ${A}.db_matrix where ${onde}
+        group by atendente`,
       params,
     ),
-    maria(
-      `select nom_agente,
-              count(*) total,
-              sum(case when cast(nom_valor as unsigned) between 3 and 5 then 1 else 0 end) boas
-         from ${A}.db_matrix_avaliations
-        where dat_resposta >= ? and dat_resposta < ? and nom_agente <> '' and nom_agente <> 'null'
-        group by nom_agente`,
-      [filtros.de, filtros.ate],
-    ),
+    (() => {
+      const ondeCsat = ['dat_resposta >= ?', 'dat_resposta < ?', "nom_agente <> ''", "nom_agente <> 'null'"];
+      const pCsat = [filtros.de, filtros.ate];
+      filtroIn('nom_pergunta', opcoes.pergunta, ondeCsat, pCsat);
+      return maria(
+        `select nom_agente,
+                count(*) total,
+                sum(case when cast(nom_valor as unsigned) between 3 and 5 then 1 else 0 end) boas
+           from ${A}.db_matrix_avaliations
+          where ${ondeCsat.join(' AND ')}
+          group by nom_agente`,
+        pCsat,
+      );
+    })(),
     maria(
       `select agente, sum(seg_logado) segundos, count(distinct date(data_login)) dias
          from ${A}.db_matrix_login
@@ -115,8 +126,8 @@ export async function matrix(filtros) {
     atend.rows.map((r) => ({
       atendente: r.atendente,
       atendimentos: num(r.atendimentos) || 0,
-      tmaSeg: r.tma === null ? null : Math.round(num(r.tma)),
-      tmeSeg: r.tme === null ? null : Math.round(num(r.tme)),
+      tmaSoma: num(r.tma_soma) || 0, tmaN: num(r.tma_n) || 0,
+      tmeSoma: num(r.tme_soma) || 0, tmeN: num(r.tme_n) || 0,
     })),
     porAtendenteMatrix, 'atendente',
   );
@@ -151,8 +162,8 @@ export async function matrix(filtros) {
       email: a.email,
       agente: a.agente,
       atendimentos: a.atendimentos || 0,
-      tmaSeg: a.tmaSeg ?? null,
-      tmeSeg: a.tmeSeg ?? null,
+      tmaSeg: media(a.tmaSoma, a.tmaN),
+      tmeSeg: media(a.tmeSoma, a.tmeN),
       csat: a.respostas ? a.boas / a.respostas : null,
       logadoDiaSeg: dias ? Math.round((a.segLogado || 0) / dias) : null,
       pausaDiaSeg: dias ? Math.round((a.segPausado || 0) / dias) : null,
@@ -171,11 +182,12 @@ export async function native(filtros) {
 
   const [atend, login, stops] = await Promise.all([
     maria(
-      `select distinct agente,
-              count(case when coalesce(perdida, 0) = 0 then protocolo end) over (partition by agente) as atendimentos,
-              percentile_cont(0.5) within group (order by TIME_TO_SEC(atendimento)) over (partition by agente) as tma,
-              percentile_cont(0.5) within group (order by TIME_TO_SEC(espera)) over (partition by agente) as tme
-         from ${A}.db_native where ${onde}`,
+      `select agente,
+              count(case when coalesce(perdida, 0) = 0 then protocolo end) as atendimentos,
+              sum(TIME_TO_SEC(atendimento)) as tma_soma, count(TIME_TO_SEC(atendimento)) as tma_n,
+              sum(TIME_TO_SEC(espera)) as tme_soma, count(TIME_TO_SEC(espera)) as tme_n
+         from ${A}.db_native where ${onde}
+        group by agente`,
       params,
     ),
     // só as linhas de "Sessão" contam como tempo logado, como na medida
@@ -189,11 +201,17 @@ export async function native(filtros) {
         group by agente`,
       [filtros.de, filtros.ate],
     ),
-    // pausa REAL, da tabela de pausas (a medida original somava duração de sessão)
+    // pausa pelos eventos de pausa do login (tempo_pausa diferente de zero), dividida
+    // pelos dias COM pausa: regra de Tempo_Pausa_Native_Media_Diaria_Segundos do Power
+    // BI (DN-05, D-05). A db_native_stops tem linhas repetidas e dava pausa maior que o
+    // tempo logado.
     maria(
-      `select agente, sum(TIME_TO_SEC(tempo_em_pausa)) segundos
-         from ${A}.db_native_stops
-        where data_hora >= ? and data_hora < ? and agente <> '' and agente <> 'null'
+      `select agente,
+              sum(TIMESTAMPDIFF(SECOND, data_hora_inicio, data_hora_fim)) segundos,
+              count(distinct date(data_hora_inicio)) dias
+         from ${A}.db_native_login
+        where data_hora_inicio >= ? and data_hora_inicio < ? and agente <> '' and agente <> 'null'
+          and TIME_TO_SEC(tempo_pausa) <> 0
         group by agente`,
       [filtros.de, filtros.ate],
     ),
@@ -204,8 +222,8 @@ export async function native(filtros) {
     atend.rows.map((r) => ({
       agenteBruto: r.agente,
       atendimentos: num(r.atendimentos) || 0,
-      tmaSeg: r.tma === null ? null : Math.round(num(r.tma)),
-      tmeSeg: r.tme === null ? null : Math.round(num(r.tme)),
+      tmaSoma: num(r.tma_soma) || 0, tmaN: num(r.tma_n) || 0,
+      tmeSoma: num(r.tme_soma) || 0, tmeN: num(r.tme_n) || 0,
     })),
     porAgenteNative, 'agenteBruto',
   );
@@ -222,21 +240,26 @@ export async function native(filtros) {
     alvo.segLogado = (alvo.segLogado || 0) + num(r.segundos);
     diasPorAgente.set(alvo, (diasPorAgente.get(alvo) || 0) + num(r.dias));
   }
+  // a pausa divide pelos dias em que houve pausa, não pelos dias logados (D-05)
+  const diasPausaPorAgente = new Map();
   for (const r of stops.rows) {
     const alvo = acha(r.agente);
-    if (alvo) alvo.segPausado = (alvo.segPausado || 0) + num(r.segundos);
+    if (!alvo) continue;
+    alvo.segPausado = (alvo.segPausado || 0) + num(r.segundos);
+    diasPausaPorAgente.set(alvo, (diasPausaPorAgente.get(alvo) || 0) + num(r.dias));
   }
 
   return [...base.values()].map((a) => {
     const dias = diasPorAgente.get(a) || 0;
+    const diasPausa = diasPausaPorAgente.get(a) || 0;
     return {
       email: a.email,
       agente: a.agente,
       atendimentos: a.atendimentos || 0,
-      tmaSeg: a.tmaSeg ?? null,
-      tmeSeg: a.tmeSeg ?? null,
+      tmaSeg: media(a.tmaSoma, a.tmaN),
+      tmeSeg: media(a.tmeSoma, a.tmeN),
       logadoDiaSeg: dias ? Math.round((a.segLogado || 0) / dias) : null,
-      pausaDiaSeg: dias ? Math.round((a.segPausado || 0) / dias) : null,
+      pausaDiaSeg: diasPausa ? Math.round((a.segPausado || 0) / diasPausa) : null,
     };
   }).sort((x, y) => y.atendimentos - x.atendimentos);
 }

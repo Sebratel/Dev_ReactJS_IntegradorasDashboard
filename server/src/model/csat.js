@@ -42,6 +42,25 @@ function juntar(porPeriodo, linhas, campos) {
 
 // ------------------------------------------------------------------ CSAT MATRIX
 
+/**
+ * Serviço e Ativo/Receptivo chegam às avaliações pelo protocolo (DN-07, D-06): a
+ * avaliação entra se o protocolo teve algum atendimento com aquele serviço/sentido.
+ * EXISTS e não JOIN, porque protocolo transferido tem várias linhas na db_matrix e o
+ * JOIN contava a mesma resposta mais de uma vez. Sem janela de data: a resposta de
+ * 01/10 sobre um atendimento de 30/09 não pode sumir. A tabela de avaliações precisa
+ * do apelido `a`.
+ */
+function filtroPeloAtendimento(filtros, onde, params) {
+  const cond = [];
+  const pCond = [];
+  inClause(`CASE m.ativo_receptivo WHEN '1' THEN 'Receptivo' WHEN '0' THEN 'Ativo' ELSE m.ativo_receptivo END`,
+    filtros.ativoReceptivo, cond, pCond);
+  inClause('m.servico', filtros.servico, cond, pCond);
+  if (!cond.length) return;
+  onde.push(`exists (select 1 from ${MATRIX} m where m.protocolo = a.num_protocolo and ${cond.join(' AND ')})`);
+  params.push(...pCond);
+}
+
 export async function serieMatrix(filtros) {
   const porDia = filtros.granularidade !== 'mes';
   const fmt = porDia ? '%Y-%m-%d' : '%Y-%m';
@@ -55,12 +74,7 @@ export async function serieMatrix(filtros) {
   const ondeAval = ['a.dat_resposta >= ?', 'a.dat_resposta < ?'];
   const pAval = [filtros.de, filtros.ate];
   inClause('a.nom_pergunta', filtros.pergunta, ondeAval, pAval);
-
-  // filtro do lado do atendimento chega às avaliações pelo protocolo
-  const filtraPeloAtendimento = ondeMatrix.length > 3;
-  const juncao = filtraPeloAtendimento
-    ? `join ${MATRIX} m on m.protocolo = a.num_protocolo and ${ondeMatrix.join(' AND ')}`
-    : '';
+  filtroPeloAtendimento(filtros, ondeAval, pAval);
 
   const [finalizados, respostas] = await Promise.all([
     query(
@@ -75,9 +89,9 @@ export async function serieMatrix(filtros) {
               count(distinct a.num_protocolo) protocolos_avaliados,
               sum(case when cast(a.nom_valor as unsigned) between 3 and 5 then 1 else 0 end) boas,
               count(*) total
-         from ${AVAL_MATRIX} a ${juncao}
+         from ${AVAL_MATRIX} a
         where ${ondeAval.join(' AND ')} group by periodo`,
-      filtraPeloAtendimento ? [...pMatrix, ...pAval] : pAval,
+      pAval,
     ),
   ]);
 
@@ -102,13 +116,14 @@ export async function serieMatrix(filtros) {
 }
 
 export async function detalhadoMatrix(filtros, limite = 500) {
-  const where = ['dat_resposta >= ?', 'dat_resposta < ?'];
+  const where = ['a.dat_resposta >= ?', 'a.dat_resposta < ?'];
   const params = [filtros.de, filtros.ate];
-  inClause('nom_pergunta', filtros.pergunta, where, params);
+  inClause('a.nom_pergunta', filtros.pergunta, where, params);
+  filtroPeloAtendimento(filtros, where, params);
   const { rows } = await query(
-    `select dat_resposta, nom_agente, nom_conta, nom_pergunta, nom_resposta,
-            nom_tipo_integracao, nom_valor, num_protocolo, num_telefone
-       from ${AVAL_MATRIX}
+    `select a.dat_resposta, a.nom_agente, a.nom_conta, a.nom_pergunta, a.nom_resposta,
+            a.nom_tipo_integracao, a.nom_valor, a.num_protocolo, a.num_telefone
+       from ${AVAL_MATRIX} a
       where ${where.join(' AND ')}
       order by dat_resposta desc limit ?`,
     [...params, limite],
@@ -147,6 +162,11 @@ export async function filtrosMatrix(filtros) {
 // cliente respondeu uma vez, não duas.
 
 const ORIGEM_NATIVE = 'native_relatorio_107';
+/**
+ * Só a Nota1 entra (decisão de 12/11/2026, QA). Hoje é a única preenchida; se a Native
+ * passar a mandar Nota2 ou Nota3, elas não se somam à nota nem à adesão.
+ */
+const PERGUNTA_NATIVE = 'Nota1';
 
 /** Onde a pesquisa da URA começa: antes disso não há nota, e adesão 0% mentiria. */
 async function inicioNative() {
@@ -165,8 +185,8 @@ export async function serieNative(filtros) {
 
   // A avaliação traz fila e sentido da própria perna, então os mesmos filtros
   // valem dos dois lados da divisão da adesão.
-  const ondeAval = ['origem = ?', 'dat_resposta >= ?', 'dat_resposta < ?'];
-  const pAval = [ORIGEM_NATIVE, filtros.de, filtros.ate];
+  const ondeAval = ['origem = ?', 'nom_pergunta = ?', 'dat_resposta >= ?', 'dat_resposta < ?'];
+  const pAval = [ORIGEM_NATIVE, PERGUNTA_NATIVE, filtros.de, filtros.ate];
   inClause('sentido', filtros.sentido, ondeAval, pAval);
   inClause('fila', filtros.fila, ondeAval, pAval);
   inClause('nom_valor', filtros.nota, ondeAval, pAval);
@@ -222,8 +242,8 @@ export async function serieNative(filtros) {
 }
 
 export async function detalhadoNative(filtros, limite = 500) {
-  const where = ['origem = ?', 'dat_resposta >= ?', 'dat_resposta < ?'];
-  const params = [ORIGEM_NATIVE, filtros.de, filtros.ate];
+  const where = ['origem = ?', 'nom_pergunta = ?', 'dat_resposta >= ?', 'dat_resposta < ?'];
+  const params = [ORIGEM_NATIVE, PERGUNTA_NATIVE, filtros.de, filtros.ate];
   inClause('sentido', filtros.sentido, where, params);
   inClause('fila', filtros.fila, where, params);
   inClause('nom_valor', filtros.nota, where, params);
@@ -243,7 +263,7 @@ export async function detalhadoNative(filtros, limite = 500) {
 export async function filtrosNative(filtros) {
   const params = [filtros.de, filtros.ate];
   const [nota, fila, sentido] = await Promise.all([
-    query(`select distinct nom_valor v from ${AVAL_NATIVE} where origem = ? and dat_resposta >= ? and dat_resposta < ? and nom_valor <> '' order by cast(nom_valor as unsigned)`, [ORIGEM_NATIVE, ...params]),
+    query(`select distinct nom_valor v from ${AVAL_NATIVE} where origem = ? and nom_pergunta = ? and dat_resposta >= ? and dat_resposta < ? and nom_valor <> '' order by cast(nom_valor as unsigned)`, [ORIGEM_NATIVE, PERGUNTA_NATIVE, ...params]),
     query(`select distinct fila v from ${NATIVE} where data_hora >= ? and data_hora < ? and fila <> '' order by v`, params),
     query(`select distinct sentido v from ${NATIVE} where data_hora >= ? and data_hora < ? and sentido <> '' order by v`, params),
   ]);
