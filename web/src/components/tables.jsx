@@ -11,7 +11,13 @@ import { useExportavel } from './ui';
  * `corFundo(linha)` devolve o hex do fundo — o texto é resolvido pela luminância,
  * nunca fixado em branco ou preto.
  */
-export function Tabela({ colunas, dados, ordemInicial, totais = null, nomeExport = null }) {
+/*
+ * `exportarTudo`: função assíncrona que devolve TODAS as linhas do recorte. Com ela o
+ * CSV busca no servidor em vez de levar só as linhas da tela (D-10).
+ * `fixoNoFim(linha)`: linhas que ficam no fim qualquer que seja a ordenação, como a
+ * "Sem correspondência" da PRODUTIVIDADE (D-15).
+ */
+export function Tabela({ colunas, dados, ordemInicial, totais = null, nomeExport = null, exportarTudo = null, fixoNoFim = null }) {
   const [ordem, setOrdem] = useState(ordemInicial || null);
 
   const maximos = useMemo(() => {
@@ -23,8 +29,10 @@ export function Tabela({ colunas, dados, ordemInicial, totais = null, nomeExport
   }, [colunas, dados]);
 
   const linhas = useMemo(() => {
-    if (!ordem?.key) return dados;
-    const arr = [...dados];
+    const fim = fixoNoFim ? dados.filter(fixoNoFim) : [];
+    const meio = fixoNoFim ? dados.filter((d) => !fixoNoFim(d)) : dados;
+    if (!ordem?.key) return [...meio, ...fim];
+    const arr = [...meio];
     arr.sort((a, b) => {
       const va = a[ordem.key];
       const vb = b[ordem.key];
@@ -34,8 +42,8 @@ export function Tabela({ colunas, dados, ordemInicial, totais = null, nomeExport
       const cmp = String(va ?? '').localeCompare(String(vb ?? ''), 'pt-BR');
       return ordem.dir === 'asc' ? cmp : -cmp;
     });
-    return arr;
-  }, [dados, ordem]);
+    return [...arr, ...fim];
+  }, [dados, ordem, fixoNoFim]);
 
   const clique = (key) => {
     setOrdem((o) => (o?.key === key ? { key, dir: o.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'desc' }));
@@ -44,7 +52,11 @@ export function Tabela({ colunas, dados, ordemInicial, totais = null, nomeExport
   // Exportação: o cabeçalho do `Visual` desenha o botão, esta tabela entrega o
   // conteúdo. Sai o que está na tela — a ordenação escolhida e a linha de
   // totais, quando existe.
-  useExportavel(nomeExport, () => (linhas.length ? { colunas, linhas, totais } : null));
+  useExportavel(nomeExport, () => {
+    if (!linhas.length) return null;
+    if (!exportarTudo) return { colunas, linhas, totais };
+    return exportarTudo().then((todas) => ({ colunas, linhas: todas, totais }));
+  });
 
   const classe = (c) => (c.align === 'left' ? 'left' : c.align === 'center' ? 'center' : 'right');
 

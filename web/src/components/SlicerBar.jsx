@@ -193,8 +193,13 @@ const PRESETS = [
   },
 ];
 
-/** Período com presets — quase ninguém quer digitar data. */
-export function FiltroPeriodo({ de, ate, onChange }) {
+/**
+ * Período com presets — quase ninguém quer digitar data.
+ *
+ * `min` é o piso da tela (as do GERAL começam em 01/01/2026, D-11): o calendário não
+ * deixa escolher antes dele e um preset que começaria antes é cortado no piso.
+ */
+export function FiltroPeriodo({ de, ate, onChange, min = null }) {
   const [aberto, setAberto] = useState(false);
   const ref = useRef(null);
 
@@ -217,7 +222,7 @@ export function FiltroPeriodo({ de, ate, onChange }) {
       {aberto && (
         <div className="pop pop-periodo">
           <div className="datas">
-            <input type="date" value={de} max={ate} onChange={(e) => onChange(e.target.value, ate)} />
+            <input type="date" value={de} min={min || undefined} max={ate} onChange={(e) => e.target.value && onChange(e.target.value, ate)} />
             <span>até</span>
             <input type="date" value={ate} min={de} onChange={(e) => onChange(de, e.target.value)} />
           </div>
@@ -226,8 +231,8 @@ export function FiltroPeriodo({ de, ate, onChange }) {
               <button
                 key={p.id}
                 type="button"
-                className={de === p.de() && ate === p.ate() ? 'on' : ''}
-                onClick={() => { onChange(p.de(), p.ate()); setAberto(false); }}
+                className={de === noPiso(p.de(), min) && ate === p.ate() ? 'on' : ''}
+                onClick={() => { onChange(noPiso(p.de(), min), p.ate()); setAberto(false); }}
               >
                 {p.label}
               </button>
@@ -252,8 +257,80 @@ export function FiltroPeriodo({ de, ate, onChange }) {
  * `/meta` responder — é o mesmo padrão de `params.js`, então na configuração de
  * fábrica nada pisca.
  */
-export function usePeriodoPadrao() {
+export function usePeriodoPadrao({ geral = false } = {}) {
   const { data: meta } = useMeta();
   const dias = meta?.periodo?.padraoDias || 30;
-  return useMemo(() => ({ de: iso(menosDias(dias - 1)), ate: iso(hoje()) }), [dias]);
+  const piso = geral ? (meta?.periodo?.inicioGeral || INICIO_GERAL) : null;
+  return useMemo(() => ({ de: noPiso(iso(menosDias(dias - 1)), piso), ate: iso(hoje()) }), [dias, piso]);
+}
+
+/**
+ * Primeiro dia das telas do GERAL (D-11). Vem de `/meta` (params.js do servidor);
+ * a constante só cobre a primeira renderização, antes de `/meta` responder.
+ */
+const INICIO_GERAL = '2026-01-01';
+
+/** Data ISO nunca anterior ao piso. */
+const noPiso = (data, piso) => (piso && data < piso ? piso : data);
+
+export function useInicioGeral() {
+  const { data: meta } = useMeta();
+  return meta?.periodo?.inicioGeral || INICIO_GERAL;
+}
+
+/**
+ * Filtro de texto livre — o PROTOCOLO das telas de CSAT (D-08). Lista de protocolos
+ * não cabe num slicer de marcar (são dezenas de milhares no mês), então a pessoa
+ * digita um ou mais números, separados por vírgula, espaço ou quebra de linha.
+ */
+export function FiltroTexto({ nome, valores = [], onChange, dica = 'Um ou mais, separados por vírgula' }) {
+  const [aberto, setAberto] = useState(false);
+  const [texto, setTexto] = useState(valores.join(', '));
+  const ref = useRef(null);
+
+  useEffect(() => setTexto(valores.join(', ')), [valores.join(',')]);
+
+  useEffect(() => {
+    if (!aberto) return undefined;
+    const fora = (e) => { if (ref.current && !ref.current.contains(e.target)) setAberto(false); };
+    document.addEventListener('mousedown', fora);
+    return () => document.removeEventListener('mousedown', fora);
+  }, [aberto]);
+
+  const aplicar = () => {
+    const lista = [...new Set(texto.split(/[\s,;]+/).map((x) => x.trim()).filter(Boolean))];
+    onChange(lista);
+    setAberto(false);
+  };
+
+  const rotulo = valores.length === 1 ? valores[0] : valores.length ? `${valores.length} informados` : 'Todos';
+
+  return (
+    <div className={`filtro${valores.length ? ' ativo' : ''}`} ref={ref}>
+      <button type="button" onClick={() => setAberto((a) => !a)}>
+        <span className="nome">{nome}</span>
+        <span className="valor">{rotulo}</span>
+        <span className="seta">▾</span>
+      </button>
+      {aberto && (
+        <div className="pop">
+          <div className="lista" style={{ padding: 8 }}>
+            <input
+              className="busca-dialogo"
+              style={{ width: '100%', boxSizing: 'border-box' }}
+              placeholder={dica}
+              value={texto}
+              onChange={(e) => setTexto(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') aplicar(); }}
+              autoFocus
+            />
+          </div>
+          <div className="acoes">
+            <button type="button" onClick={() => { setTexto(''); onChange([]); setAberto(false); }}>Limpar</button>
+            <button type="button" onClick={aplicar}>Aplicar</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
