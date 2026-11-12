@@ -99,6 +99,11 @@ export function filtrosDaQuery(req) {
     nota: req.query.nota,
     // comum às duas
     agente: req.query.agente,
+    // QUARTIS: população pela Senior (D-01, D-18)
+    area: req.query.area,
+    time: req.query.time,
+    supervisor: req.query.supervisor,
+    recalcular: req.query.recalcular,
   };
 }
 
