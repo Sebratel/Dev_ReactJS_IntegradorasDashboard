@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useQuartis, useProdutividadeFiltros } from '../api';
+import { useQuartis, useQuartisFiltros } from '../api';
 import { CORES, CORES_QUARTIL, corDoTexto } from '../components/charts';
 import { Filtro, useFiltros } from '../components/SlicerBar';
 import { Erro, Loading, useExportavel, Vazio, Visual } from '../components/ui';
@@ -17,12 +17,23 @@ import { hmsSeg, int, pct } from '../format';
  * do Google Sheets da origem (DN-02). A área define quem entra no ranking; Time,
  * Supervisor e Agente só filtram as linhas, a não ser que "Quartis: No recorte"
  * esteja ligado (D-01, D-18).
+ *
+ * Slicers de métrica do Power BI (D-08, DN-13): Status Matrix (TMA/TME Matrix), Nota
+ * Pesquisa (CSAT e adesão CSAT Matrix), Pergunta CSAT (abre na do atendimento) e
+ * Tipos de Protocolo (adesão Elleven). Eles mudam os valores e o ranking da área.
  */
 
 const SEM_DADO = CORES.fundoNeutro;
 
 /** Igual a AREA_PADRAO do servidor (model/quartis.js). */
 const AREA_PADRAO = 'SUPORTE TÉCNICO';
+
+/**
+ * Pergunta do CSAT Matrix com que a tela abre (DN-09, DN-13). Igual a
+ * PERGUNTA_ATENDIMENTO do servidor (model/produtividade.js), que também a usa
+ * quando o pedido vem sem pergunta. Limpar o filtro volta para ela.
+ */
+const PERGUNTA_PADRAO = 'Como você se sentiu em relação ao atendimento da pessoa que falou com você?';
 
 // ------------------------------------------------------------------ período (D-02)
 
@@ -269,7 +280,7 @@ export function Quartis() {
   }, []);
   // a área define quem entra no ranking; abre no Suporte Técnico (DN-02, DN-11)
   const { valores, definir, definirVarios, limpar, lista, temFiltro } = useFiltros({
-    de: ultimoMes.de, ate: ultimoMes.ate, area: AREA_PADRAO,
+    de: ultimoMes.de, ate: ultimoMes.ate, area: AREA_PADRAO, pergunta: PERGUNTA_PADRAO,
   });
 
   const periodo = { de: valores.de, ate: valores.ate };
@@ -280,6 +291,10 @@ export function Quartis() {
     ativoReceptivo: lista('ativoReceptivo'),
     fila: lista('fila'),
     sentido: lista('sentido'),
+    status: lista('status'),
+    nota: lista('nota'),
+    pergunta: lista('pergunta'),
+    tipoProtocolo: lista('tipoProtocolo'),
     area: lista('area'),
     time: lista('time'),
     supervisor: lista('supervisor'),
@@ -287,7 +302,7 @@ export function Quartis() {
     recalcular: recalcular ? '1' : '',
   };
 
-  const opcoes = useProdutividadeFiltros(periodo);
+  const opcoes = useQuartisFiltros(periodo);
   const consulta = useQuartis(filtros);
   // opções da Senior vêm junto com a tabela; mantém as últimas enquanto recarrega
   const ultimasOpcoes = useRef({});
@@ -321,6 +336,10 @@ export function Quartis() {
         <Filtro nome="At/Rec Matrix" opcoes={opcoes.data?.ativoReceptivo || []} marcados={lista('ativoReceptivo')} onChange={(v) => definir('ativoReceptivo', v)} />
         <Filtro nome="Fila Native" opcoes={opcoes.data?.fila || []} marcados={lista('fila')} onChange={(v) => definir('fila', v)} />
         <Filtro nome="Sentido Native" opcoes={opcoes.data?.sentido || []} marcados={lista('sentido')} onChange={(v) => definir('sentido', v)} />
+        <Filtro nome="Status Matrix" opcoes={opcoes.data?.status || []} marcados={lista('status')} onChange={(v) => definir('status', v)} />
+        <Filtro nome="Nota Pesquisa" opcoes={opcoes.data?.nota || []} marcados={lista('nota')} onChange={(v) => definir('nota', v)} />
+        <Filtro nome="Pergunta CSAT" opcoes={opcoes.data?.pergunta || [PERGUNTA_PADRAO]} marcados={lista('pergunta')} onChange={(v) => definir('pergunta', v)} />
+        <Filtro nome="Tipos de Protocolo" opcoes={opcoes.data?.tipoProtocolo || []} marcados={lista('tipoProtocolo')} onChange={(v) => definir('tipoProtocolo', v)} />
         {temFiltro && <button type="button" className="limpar" onClick={limpar}>Limpar filtros</button>}
       </div>
 

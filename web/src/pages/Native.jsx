@@ -1,6 +1,7 @@
 import { useNativeDetalhado, useNativeFaixas, useNativeFiltros, useNativeSerie } from '../api';
 import { CORES, ComboChart } from '../components/charts';
-import { Filtro, FiltroPeriodo, usePeriodoPadrao, useFiltros } from '../components/SlicerBar';
+import { Filtro, FiltroPeriodo, useInicioGeral, usePeriodoPadrao, useFiltros } from '../components/SlicerBar';
+import { TabelaDetalhada, useLegendaDetalhado } from '../components/detalhado';
 import { Tabela } from '../components/tables';
 import { Erro, Legenda, Loading, Segmentado, Vazio, Visual } from '../components/ui';
 import { BotaoInsights } from '../components/InsightsIA';
@@ -10,9 +11,9 @@ import { dataBr, horaBr, hmsSeg, int, pct } from '../format';
  * VISÃO GERAL RELATÓRIOS - NATIVE (página `cf6d063fb88bc5b80adc` do relatório).
  *
  * Divergências propositais em relação à origem:
- *  - a série "Média de TME" lá é um SUM (rótulo diz média), e a coluna TME_minutes
- *    do modelo trunca para minuto inteiro — com 63% das esperas abaixo de 10s ela
- *    zeraria. Aqui TMA e TME são médias em segundos, como as medidas
+ *  - a série "Média de TME" lá é média (`Avg`, conferido no .pbip, D-12) da coluna
+ *    TME_minutes, que trunca para minuto inteiro — com 63% das esperas abaixo de 10s
+ *    ela quase zera. Aqui TMA e TME são médias em segundos, como as medidas
  *    TMA_Native_Segundos/TME_Native_Segundos do próprio modelo, exibidas em hh:mm:ss;
  *  - a formatação condicional de linha da tabela detalhada aponta para a tabela
  *    `payments_contracts`, que não existe neste modelo (herdada de outro relatório):
@@ -22,7 +23,8 @@ import { dataBr, horaBr, hmsSeg, int, pct } from '../format';
  *    Aqui são as não-perdidas, mesma definição de `#native_completed_services`.
  */
 export function Native() {
-  const padrao = usePeriodoPadrao();
+  const padrao = usePeriodoPadrao({ geral: true });
+  const inicio = useInicioGeral();
   const { valores, definir, definirVarios, limpar, lista, temFiltro } = useFiltros({
     de: padrao.de,
     ate: padrao.ate,
@@ -43,6 +45,7 @@ export function Native() {
   const serie = useNativeSerie(filtros);
   const detalhado = useNativeDetalhado(filtros);
   const faixas = useNativeFaixas(filtros);
+  const legenda = useLegendaDetalhado('/native/detalhado', filtros, detalhado.data?.length || 0, 'chamadas');
 
   const seriesLegenda = [
     { label: 'Atendidas', cor: CORES.gold },
@@ -55,7 +58,7 @@ export function Native() {
     <div className="page">
       <div className="filtros">
         <span className="rotulo">Filtros</span>
-        <FiltroPeriodo de={valores.de} ate={valores.ate} onChange={(de, ate) => { definirVarios({ de, ate }); }} />
+        <FiltroPeriodo de={valores.de} ate={valores.ate} min={inicio} onChange={(de, ate) => { definirVarios({ de, ate }); }} />
         <Filtro nome="Sentido" opcoes={opcoes.data?.sentido || []} marcados={lista('sentido')} onChange={(v) => definir('sentido', v)} />
         <Filtro nome="Fila" opcoes={opcoes.data?.fila || []} marcados={lista('fila')} onChange={(v) => definir('fila', v)} />
         <Filtro nome="Desconexão" opcoes={opcoes.data?.desconexao || []} marcados={lista('desconexao')} onChange={(v) => definir('desconexao', v)} />
@@ -107,16 +110,14 @@ export function Native() {
         <Visual
           className="v-tabela"
           title="Relatório detalhado"
-          sub={`Amostra das ${int(detalhado.data?.length || 0)} chamadas mais recentes do recorte`}
+          sub={legenda}
           flush
         >
-          {detalhado.isLoading ? <Loading />
-            : detalhado.isError ? <Erro erro={detalhado.error} />
-            : !detalhado.data?.length ? <Vazio />
-            : (
-              <Tabela
-                dados={detalhado.data}
-                colunas={[
+          <TabelaDetalhada
+            caminho="/native/detalhado"
+            filtros={filtros}
+            consulta={detalhado}
+            colunas={[
                   { key: 'agente', titulo: 'Agente', align: 'left', largura: 190 },
                   { key: 'data_hora', titulo: 'Data', align: 'left', fmt: (v) => `${dataBr(v)} ${horaBr(v)}` },
                   { key: 'fila', titulo: 'Fila', align: 'left' },
@@ -127,8 +128,7 @@ export function Native() {
                   { key: 'espera', titulo: 'TME', fmt: (v) => v || '—' },
                   { key: 'atendimento', titulo: 'TMA', fmt: (v) => v || '—' },
                 ]}
-              />
-            )}
+          />
         </Visual>
 
         <Visual

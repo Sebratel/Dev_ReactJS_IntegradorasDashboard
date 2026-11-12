@@ -1,8 +1,8 @@
 import { useRef } from 'react';
 import { useCsatCobertura, useCsatDetalhado, useCsatFiltros, useCsatSerie } from '../api';
 import { CORES, ComboChart } from '../components/charts';
-import { Filtro, FiltroPeriodo, usePeriodoPadrao, useFiltros } from '../components/SlicerBar';
-import { Tabela } from '../components/tables';
+import { Filtro, FiltroPeriodo, FiltroTexto, useInicioGeral, usePeriodoPadrao, useFiltros } from '../components/SlicerBar';
+import { TabelaDetalhada, useLegendaDetalhado } from '../components/detalhado';
 import { Icone } from '../components/Icone';
 import { useAlturaNoCromo } from '../components/cromo';
 import { Erro, Legenda, Loading, Segmentado, Vazio, Visual } from '../components/ui';
@@ -14,10 +14,11 @@ import { dataBr, horaBr, int, pct } from '../format';
  * combo com volume + respostas nas colunas e nota + adesão nas linhas, e uma
  * tabela larga com as respostas.
  *
- * Três séries dos combos da origem apontam para medidas que não existem mais no
- * modelo (`#finalizadas`, `#nota_csat1`, `#adesao1`), então não desenham no
- * relatório publicado. Aqui apontam para as medidas equivalentes que existem —
- * ver o comentário em `server/src/model/csat.js`.
+ * As séries usam as mesmas medidas do Power BI (FINALIZADOS/ATENDIDAS, RESPOSTAS,
+ * NOTA e ADESÃO) — ver o comentário em `server/src/model/csat.js` (D-12).
+ *
+ * Slicers (D-08): CSAT MATRIX ganha AGENTE e PROTOCOLO, que filtram os dois lados da
+ * conta (finalizados e avaliações, B15); CSAT NATIVE ganha PROTOCOLO.
  */
 
 /** A resposta vem como "Satisfeito ##1f60a##": o sufixo é o emoji codificado. */
@@ -52,13 +53,6 @@ const COLUNAS_NATIVE = [
   { key: 'ramal', titulo: 'Ramal', align: 'left' },
   { key: 'num_protocolo', titulo: 'Protocolo', align: 'left' },
 ];
-
-function TabelaRespostas({ consulta, colunas }) {
-  if (consulta.isLoading) return <Loading />;
-  if (consulta.isError) return <Erro erro={consulta.error} />;
-  if (!consulta.data?.length) return <Vazio texto="Nenhuma resposta de pesquisa no período" />;
-  return <Tabela dados={consulta.data} colunas={colunas} />;
-}
 
 /**
  * Aviso de período fora da coleta. Recorte invisível gera chamado: sem isto, quem
@@ -103,7 +97,8 @@ function AvisoCobertura({ cobertura, de, ate }) {
 }
 
 function PaginaCsat({ qual, titulo, subtitulo, colunas, linhas, filtrosDaTela, colunasTabela }) {
-  const padrao = usePeriodoPadrao();
+  const padrao = usePeriodoPadrao({ geral: true });
+  const inicio = useInicioGeral();
   const { valores, definir, definirVarios, limpar, lista, temFiltro } = useFiltros({
     de: padrao.de, ate: padrao.ate, granularidade: 'dia',
   });
@@ -116,13 +111,21 @@ function PaginaCsat({ qual, titulo, subtitulo, colunas, linhas, filtrosDaTela, c
   const serie = useCsatSerie(qual, filtros);
   const detalhado = useCsatDetalhado(qual, filtros);
   const cobertura = useCsatCobertura(qual);
+  const legenda = useLegendaDetalhado(`/${qual}/detalhado`, filtros, detalhado.data?.length || 0, 'respostas');
 
   return (
     <div className="page">
       <div className="filtros">
         <span className="rotulo">Filtros</span>
-        <FiltroPeriodo de={valores.de} ate={valores.ate} onChange={(de, ate) => { definirVarios({ de, ate }); }} />
-        {filtrosDaTela.map((f) => (
+        <FiltroPeriodo de={valores.de} ate={valores.ate} min={inicio} onChange={(de, ate) => { definirVarios({ de, ate }); }} />
+        {filtrosDaTela.map((f) => (f.texto ? (
+          <FiltroTexto
+            key={f.chave}
+            nome={f.nome}
+            valores={lista(f.chave)}
+            onChange={(v) => definir(f.chave, v)}
+          />
+        ) : (
           <Filtro
             key={f.chave}
             nome={f.nome}
@@ -130,7 +133,7 @@ function PaginaCsat({ qual, titulo, subtitulo, colunas, linhas, filtrosDaTela, c
             marcados={lista(f.chave)}
             onChange={(v) => definir(f.chave, v)}
           />
-        ))}
+        )))}
         {temFiltro && <button type="button" className="limpar" onClick={limpar}>Limpar filtros</button>}
       </div>
 
@@ -175,8 +178,14 @@ function PaginaCsat({ qual, titulo, subtitulo, colunas, linhas, filtrosDaTela, c
           )}
       </Visual>
 
-      <Visual className="v-tabela" title="Relatório detalhado" sub="Respostas da pesquisa de satisfação no período" flush>
-        <TabelaRespostas consulta={detalhado} colunas={colunasTabela} />
+      <Visual className="v-tabela" title="Relatório detalhado" sub={`Respostas da pesquisa de satisfação · ${legenda}`} flush>
+        <TabelaDetalhada
+          caminho={`/${qual}/detalhado`}
+          filtros={filtros}
+          consulta={detalhado}
+          colunas={colunasTabela}
+          vazio="Nenhuma resposta de pesquisa no período"
+        />
       </Visual>
     </div>
   );
@@ -200,6 +209,8 @@ export function CsatMatrix() {
         { chave: 'ativoReceptivo', nome: 'Ativo/Receptivo' },
         { chave: 'servico', nome: 'Fila' },
         { chave: 'pergunta', nome: 'CSAT' },
+        { chave: 'agente', nome: 'Agente' },
+        { chave: 'protocolo', nome: 'Protocolo', texto: true },
       ]}
       colunasTabela={COLUNAS_MATRIX}
     />
@@ -224,6 +235,7 @@ export function CsatNative() {
         { chave: 'sentido', nome: 'Sentido' },
         { chave: 'fila', nome: 'Fila' },
         { chave: 'nota', nome: 'Nota' },
+        { chave: 'protocolo', nome: 'Protocolo', texto: true },
       ]}
       colunasTabela={COLUNAS_NATIVE}
     />
