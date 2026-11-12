@@ -261,3 +261,30 @@ export function useCsatCobertura(qual) {
     staleTime: 10 * 60000,
   });
 }
+
+/**
+ * Total de linhas do relatório detalhado no recorte (D-10). A tabela mostra as 500
+ * mais recentes; com o total, a tela diz "500 de N" em vez de deixar parecer tudo.
+ * `caminho` = '/matrix/detalhado', '/native/detalhado', '/csat-matrix/detalhado'...
+ */
+export function useTotalDetalhado(caminho, filtros) {
+  return useQuery({
+    queryKey: ['total', caminho, filtros],
+    queryFn: () => apiGet(`${caminho}/total`, filtros),
+    staleTime: 60000,
+  });
+}
+
+/** Todas as linhas do recorte, para o CSV (D-10, opção B). */
+export function buscarTodas(caminho, filtros) {
+  return apiGet(caminho, { ...filtros, limite: 'todos' });
+}
+
+/** Opções dos slicers de métrica dos QUARTIS (D-08). */
+export function useQuartisFiltros(periodo) {
+  return useQuery({
+    queryKey: ['quartis', 'filtros', periodo],
+    queryFn: () => apiGet('/quartis/filtros', periodo),
+    staleTime: 5 * 60000,
+  });
+}
