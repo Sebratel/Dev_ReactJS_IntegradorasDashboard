@@ -89,7 +89,10 @@ async function pesos() {
  * ativo_receptivo, serviço e status, para o ranking não mudar de forma conforme o
  * recorte da tela.
  */
-async function adesaoCsatMatrix(periodo) {
+async function adesaoCsatMatrix(periodo, notas = []) {
+  // o slicer NOTA PESQUISA (db_matrix_avaliations[nom_valor]) não é removido pela
+  // medida BLIND, então ele recorta as avaliações também aqui (D-08)
+  const filtroNota = notas.length ? ` and nom_valor in (${notas.map(() => '?').join(',')})` : '';
   const [finalizados, avaliados] = await Promise.all([
     maria(
       `select atendente, count(protocolo) n from ${A}.db_matrix
@@ -100,9 +103,9 @@ async function adesaoCsatMatrix(periodo) {
     ),
     maria(
       `select nom_agente, count(distinct num_protocolo) n from ${A}.db_matrix_avaliations
-        where dat_resposta >= ? and dat_resposta < ? and nom_agente <> '' and nom_agente <> 'null'
+        where dat_resposta >= ? and dat_resposta < ? and nom_agente <> '' and nom_agente <> 'null'${filtroNota}
         group by nom_agente`,
-      [periodo.de, periodo.ate],
+      [periodo.de, periodo.ate, ...notas],
     ),
   ]);
   const porBruto = new Map();
@@ -206,16 +209,27 @@ async function csatNative(periodo) {
   return { avaliacoes: avaliacoes.rows, atendidas: atendidas.rows };
 }
 
-/** Protocolos abertos no Elleven por agente (chave: e-mail do CRM). */
-async function protocolosElleven(periodo) {
+/**
+ * Protocolos abertos no Elleven por agente (chave: e-mail do CRM). `tipos` é o slicer
+ * TIPOS PROTOCOLOS do Power BI (allProtocolsVoalle[protocol_type] = incident_types.title),
+ * que a medida BLIND não remove: recorta o numerador da adesão (D-08).
+ */
+async function protocolosElleven(periodo, tipos = []) {
+  const params = [periodo.de, periodo.ate];
+  let filtroTipo = '';
+  if (tipos.length) {
+    filtroTipo = ` and it.title in (${tipos.map((_, i) => `$${i + 3}`).join(',')})`;
+    params.push(...tipos);
+  }
   const { rows } = await pg(
     `select u.email, count(distinct ai.protocol) n
        from erp.assignments a
        join erp.assignment_incidents ai on ai.assignment_id = a.id
+       left join erp.incident_types it on it.id = ai.incident_type_id
        join erp.users u on u.id = a.created_by
-      where a.created >= $1 and a.created < $2 and u.email is not null and u.email <> ''
+      where a.created >= $1 and a.created < $2 and u.email is not null and u.email <> ''${filtroTipo}
       group by u.email`,
-    [periodo.de, periodo.ate],
+    params,
   );
   const mapa = new Map();
   for (const r of rows) {
@@ -259,10 +273,10 @@ export async function tabela(filtros) {
     : [produtividade.PERGUNTA_ATENDIMENTO];
 
   const [linhasMatrix, linhasNative, csatMatrixPorBruto, ellevenPorEmail, blind, csatNat, config, mapa] = await Promise.all([
-    produtividade.matrix(filtros, { pergunta: perguntaCsat }),
+    produtividade.matrix(filtros, { pergunta: perguntaCsat, nota: listaDe(filtros.nota) }),
     produtividade.native(filtros),
-    adesaoCsatMatrix(periodo),
-    protocolosElleven(periodo),
+    adesaoCsatMatrix(periodo, listaDe(filtros.nota)),
+    protocolosElleven(periodo, listaDe(filtros.tipoProtocolo)),
     atendimentosBlind(periodo),
     csatNative(periodo),
     pesos(),
@@ -443,5 +457,42 @@ export async function tabela(filtros) {
       supervisor: [...new Set(daArea.map((c) => c.supervisor).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR')),
       agente: [...new Set(daArea.map((c) => c.colaborador).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR')),
     },
+  };
+}
+
+/**
+ * Opções dos slicers da tela (D-08): os recortes de métrica do Power BI. Área, Time,
+ * Supervisor e Agente vêm junto com a tabela, porque dependem da Senior no período.
+ */
+export async function filtrosDisponiveis(filtros) {
+  const p = [filtros.de, filtros.ate];
+  const [servico, ativoReceptivo, status, fila, sentido, nota, pergunta, tipos] = await Promise.all([
+    maria(`select distinct servico v from ${A}.db_matrix where data_atendimento >= ? and data_atendimento < ? and servico <> '' order by v`, p),
+    maria(`select distinct CASE ativo_receptivo WHEN '1' THEN 'Receptivo' WHEN '0' THEN 'Ativo' ELSE ativo_receptivo END v
+             from ${A}.db_matrix where data_atendimento >= ? and data_atendimento < ? and ativo_receptivo is not null order by v`, p),
+    maria(`select distinct CASE status WHEN 3 THEN 'Finalizado' WHEN 6 THEN 'Transferido' ELSE CAST(status AS CHAR) END v
+             from ${A}.db_matrix where data_atendimento >= ? and data_atendimento < ? and status is not null order by v`, p),
+    maria(`select distinct fila v from ${A}.db_native where data_hora >= ? and data_hora < ? and fila <> '' order by v`, p),
+    maria(`select distinct sentido v from ${A}.db_native where data_hora >= ? and data_hora < ? and sentido <> '' order by v`, p),
+    maria(`select distinct nom_valor v from ${A}.db_matrix_avaliations where dat_resposta >= ? and dat_resposta < ? and nom_valor <> '' order by cast(nom_valor as unsigned)`, p),
+    maria(`select distinct nom_pergunta v from ${A}.db_matrix_avaliations where dat_resposta >= ? and dat_resposta < ? and nom_pergunta <> '' order by v`, p),
+    pg(`select distinct it.title v
+          from erp.assignments a
+          join erp.assignment_incidents ai on ai.assignment_id = a.id
+          join erp.incident_types it on it.id = ai.incident_type_id
+         where a.created >= $1 and a.created < $2 and it.title is not null and it.title <> ''
+         order by v`, p),
+  ]);
+  const valores = (r) => r.rows.map((x) => x.v).filter(Boolean);
+  return {
+    servico: valores(servico),
+    ativoReceptivo: valores(ativoReceptivo),
+    status: valores(status),
+    fila: valores(fila),
+    sentido: valores(sentido),
+    nota: valores(nota),
+    pergunta: valores(pergunta),
+    tipoProtocolo: valores(tipos),
+    perguntaPadrao: produtividade.PERGUNTA_ATENDIMENTO,
   };
 }
