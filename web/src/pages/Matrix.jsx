@@ -13,9 +13,9 @@ import { dataBr, horaBr, hmsSeg, int, pct } from '../format';
  *  - ATENDIMENTOS na origem é `Sum(protocolo)` — soma o número do protocolo, da ordem
  *    de 9e15. Aqui é contagem. (A própria tabela de faixas do relatório se contradiz:
  *    a coluna soma protocolos e o percentual conta linhas.)
- *  - TMA/TME são medianas. `data_finalizacao` marca quando alguém fecha a conversa,
- *    não quando o atendimento acaba: 7% passam de 24h e levam a média para 6h34,
- *    contra 26 min de mediana.
+ *  - TMA/TME são médias (DN-01, QA de 27/10/2026), como a plataforma Matrix e o Power
+ *    BI. Atenção: `data_finalizacao` marca quando alguém fecha a conversa, então
+ *    conversa esquecida aberta pesa na média.
  */
 export function Matrix() {
   const padrao = usePeriodoPadrao();
@@ -53,7 +53,7 @@ export function Matrix() {
       <Visual
         className="v-grafico"
         title="Indicadores Matrix"
-        sub="Relatório detalhado com os principais indicadores do MatrixGO · TMA e TME em mediana"
+        sub="Relatório detalhado com os principais indicadores do MatrixGO · TMA e TME em média"
         actions={
           <>
             <Segmentado
@@ -75,8 +75,8 @@ export function Matrix() {
                 itens={[
                   { label: 'Atendimentos', cor: CORES.gold },
                   { label: 'Transferidas', cor: CORES.primary },
-                  { label: 'TMA mediano', cor: CORES.ink, linha: true },
-                  { label: 'TME mediano', cor: CORES.blue, linha: true },
+                  { label: 'TMA médio', cor: CORES.ink, linha: true },
+                  { label: 'TME médio', cor: CORES.blue, linha: true },
                 ]}
               />
               <ComboChart
@@ -86,8 +86,8 @@ export function Matrix() {
                   { key: 'transferidas', nome: 'Transferidas', cor: CORES.primary },
                 ]}
                 linhas={[
-                  { key: 'tmaSeg', nome: 'TMA mediano', cor: CORES.ink, fmt: hmsSeg },
-                  { key: 'tmeSeg', nome: 'TME mediano', cor: CORES.blue, fmt: hmsSeg },
+                  { key: 'tmaSeg', nome: 'TMA médio', cor: CORES.ink, fmt: hmsSeg },
+                  { key: 'tmeSeg', nome: 'TME médio', cor: CORES.blue, fmt: hmsSeg },
                 ]}
                 escalaSecundaria
               />

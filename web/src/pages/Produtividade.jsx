@@ -68,8 +68,8 @@ export function Produtividade() {
     const comuns = [
       { key: 'agente', titulo: 'Agente', align: 'left', largura: 260 },
       { key: 'atendimentos', titulo: 'Atendimentos', fmt: int, corFundo: comHeatmap(dados, 'atendimentos') },
-      { key: 'tmaSeg', titulo: 'TMA mediano', fmt: hmsSeg, corFundo: comHeatmap(dados, 'tmaSeg') },
-      { key: 'tmeSeg', titulo: 'TME mediano', fmt: hmsSeg, corFundo: comHeatmap(dados, 'tmeSeg') },
+      { key: 'tmaSeg', titulo: 'TMA médio', fmt: hmsSeg, corFundo: comHeatmap(dados, 'tmaSeg') },
+      { key: 'tmeSeg', titulo: 'TME médio', fmt: hmsSeg, corFundo: comHeatmap(dados, 'tmeSeg') },
     ];
     const tempos = [
       { key: 'logadoDiaSeg', titulo: 'Logado / dia', fmt: hmsSeg, corFundo: comHeatmap(dados, 'logadoDiaSeg') },
@@ -134,7 +134,7 @@ export function Produtividade() {
         title={atual.titulo}
         sub={visao === 'elleven'
           ? 'Protocolos abertos no Elleven por quem os criou'
-          : 'TMA e TME em mediana; tempo logado e de pausa são médias por dia trabalhado'}
+          : 'TMA e TME em média; tempo logado e de pausa são médias por dia (pausa: dias com pausa)'}
         flush
       >
         {consulta.isLoading ? <Loading />
