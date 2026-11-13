@@ -74,19 +74,33 @@ export function ProvedorExportar({ registrar, children }) {
   return <SlotExportar.Provider value={registrar}>{children}</SlotExportar.Provider>;
 }
 
-/** Um botão por conjunto registrado. Com um só, ele se chama "CSV". */
+/**
+ * Um botão por conjunto registrado. Com um só, ele se chama "CSV".
+ *
+ * `montar()` pode devolver uma promessa: as tabelas detalhadas buscam no servidor
+ * todas as linhas do recorte na hora do clique (D-10), em vez das 500 da tela.
+ */
 export function BotoesExportar({ itens, nome }) {
-  const baixar = (item) => {
-    const conteudo = item.montar();
-    if (!conteudo) return;
-    exportarTabela({ nome: item.rotulo ? `${nome} - ${item.rotulo}` : nome, ...conteudo });
+  const [ocupado, setOcupado] = useState(null);
+  const baixar = async (item) => {
+    setOcupado(item);
+    try {
+      const conteudo = await item.montar();
+      if (!conteudo) return;
+      exportarTabela({ nome: item.rotulo ? `${nome} - ${item.rotulo}` : nome, ...conteudo });
+    } catch (err) {
+      // eslint-disable-next-line no-alert
+      window.alert(`Não foi possível exportar: ${err.message || err}`);
+    } finally {
+      setOcupado(null);
+    }
   };
   return itens.map((item, i) => (
     <BotaoExportar
       key={item.rotulo || i}
-      rotulo={itens.length > 1 && item.rotulo ? item.rotulo : 'CSV'}
+      rotulo={ocupado === item ? 'Baixando…' : (itens.length > 1 && item.rotulo ? item.rotulo : 'CSV')}
       titulo={`Exportar ${item.rotulo || nome} em CSV`}
-      onExportar={() => baixar(item)}
+      onExportar={() => !ocupado && baixar(item)}
     />
   ));
 }

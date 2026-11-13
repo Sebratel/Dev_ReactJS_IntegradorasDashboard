@@ -1,6 +1,7 @@
 import { useMatrixDetalhado, useMatrixFaixas, useMatrixFiltros, useMatrixSerie } from '../api';
 import { CORES, ComboChart } from '../components/charts';
-import { Filtro, FiltroPeriodo, usePeriodoPadrao, useFiltros } from '../components/SlicerBar';
+import { Filtro, FiltroPeriodo, useInicioGeral, usePeriodoPadrao, useFiltros } from '../components/SlicerBar';
+import { TabelaDetalhada, useLegendaDetalhado } from '../components/detalhado';
 import { Tabela } from '../components/tables';
 import { Erro, Legenda, Loading, Segmentado, Vazio, Visual } from '../components/ui';
 import { BotaoInsights } from '../components/InsightsIA';
@@ -9,16 +10,16 @@ import { dataBr, horaBr, hmsSeg, int, pct } from '../format';
 /**
  * VISÃO GERAL RELATÓRIOS - MATRIX (página `7e775486029635d610a4` do relatório).
  *
- * Divergências propositais em relação à origem, todas por causa das agregações de lá:
- *  - ATENDIMENTOS na origem é `Sum(protocolo)` — soma o número do protocolo, da ordem
- *    de 9e15. Aqui é contagem. (A própria tabela de faixas do relatório se contradiz:
- *    a coluna soma protocolos e o percentual conta linhas.)
+ * Mesmas agregações do Power BI (conferidas no .pbip em 27/10/2026, D-12):
+ *  - ATENDIMENTOS é contagem de protocolos (`Count`).
  *  - TMA/TME são médias (DN-01, QA de 27/10/2026), como a plataforma Matrix e o Power
  *    BI. Atenção: `data_finalizacao` marca quando alguém fecha a conversa, então
  *    conversa esquecida aberta pesa na média.
+ *  - Slicer ATENDENTE (D-08): nome canônico do CRM, traduzido para os nomes do Matrix.
  */
 export function Matrix() {
-  const padrao = usePeriodoPadrao();
+  const padrao = usePeriodoPadrao({ geral: true });
+  const inicio = useInicioGeral();
   const { valores, definir, definirVarios, limpar, lista, temFiltro } = useFiltros({
     de: padrao.de,
     ate: padrao.ate,
@@ -32,21 +33,24 @@ export function Matrix() {
     ativoReceptivo: lista('ativoReceptivo'),
     status: lista('status'),
     servico: lista('servico'),
+    agente: lista('agente'),
   };
 
   const opcoes = useMatrixFiltros(periodo);
   const serie = useMatrixSerie(filtros);
   const detalhado = useMatrixDetalhado(filtros);
   const faixas = useMatrixFaixas(filtros);
+  const legenda = useLegendaDetalhado('/matrix/detalhado', filtros, detalhado.data?.length || 0, 'atendimentos');
 
   return (
     <div className="page">
       <div className="filtros">
         <span className="rotulo">Filtros</span>
-        <FiltroPeriodo de={valores.de} ate={valores.ate} onChange={(de, ate) => { definirVarios({ de, ate }); }} />
+        <FiltroPeriodo de={valores.de} ate={valores.ate} min={inicio} onChange={(de, ate) => { definirVarios({ de, ate }); }} />
         <Filtro nome="Ativo/Receptivo" opcoes={opcoes.data?.ativoReceptivo || []} marcados={lista('ativoReceptivo')} onChange={(v) => definir('ativoReceptivo', v)} />
         <Filtro nome="Status" opcoes={opcoes.data?.status || []} marcados={lista('status')} onChange={(v) => definir('status', v)} />
         <Filtro nome="Serviço" opcoes={opcoes.data?.servico || []} marcados={lista('servico')} onChange={(v) => definir('servico', v)} />
+        <Filtro nome="Atendente" opcoes={opcoes.data?.agente || []} marcados={lista('agente')} onChange={(v) => definir('agente', v)} />
         {temFiltro && <button type="button" className="limpar" onClick={limpar}>Limpar filtros</button>}
       </div>
 
@@ -99,16 +103,14 @@ export function Matrix() {
         <Visual
           className="v-tabela"
           title="Relatório detalhado"
-          sub={`Amostra dos ${int(detalhado.data?.length || 0)} atendimentos mais recentes do recorte`}
+          sub={legenda}
           flush
         >
-          {detalhado.isLoading ? <Loading />
-            : detalhado.isError ? <Erro erro={detalhado.error} />
-            : !detalhado.data?.length ? <Vazio />
-            : (
-              <Tabela
-                dados={detalhado.data}
-                colunas={[
+          <TabelaDetalhada
+            caminho="/matrix/detalhado"
+            filtros={filtros}
+            consulta={detalhado}
+            colunas={[
                   { key: 'atendente', titulo: 'Atendente', align: 'left', largura: 190 },
                   { key: 'data_atendimento', titulo: 'Atendimento', align: 'left', fmt: (v) => `${dataBr(v)} ${horaBr(v)}` },
                   { key: 'servico', titulo: 'Serviço', align: 'left' },
@@ -125,8 +127,7 @@ export function Matrix() {
                   { key: 'tme_seg', titulo: 'TME', fmt: hmsSeg },
                   { key: 'tma_seg', titulo: 'TMA', fmt: hmsSeg },
                 ]}
-              />
-            )}
+          />
         </Visual>
 
         <Visual

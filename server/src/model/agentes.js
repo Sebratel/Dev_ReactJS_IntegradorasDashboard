@@ -70,12 +70,16 @@ export async function mapaAgentes() {
     if (agente) porAgenteNative.set(n.name, agente);
   }
 
-  cache = {
+  const mapa = {
     porEmail,
     porAtendenteMatrix,
     porAgenteNative,
     agentes: [...porEmail.values()],
   };
+  // lista do Matrix incompleta (falha da API no meio da paginação, D-13): o mapa
+  // vale só para esta consulta, e a próxima tenta montar de novo
+  if (matrix.parcial) return mapa;
+  cache = mapa;
   cachedAt = Date.now();
   return cache;
 }

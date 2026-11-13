@@ -12,7 +12,7 @@ import { comCache, estatisticasCache } from '../core/cache.js';
 import { exigirAuth } from '../auth/middleware.js';
 import { iaConfigurada, gerarInsightsVisual } from '../ia/insights.js';
 import { VISUAIS } from '../ia/visuais.js';
-import { params } from '../params.js';
+import { params, INICIO_GERAL } from '../params.js';
 
 export const geral = Router();
 
@@ -32,7 +32,10 @@ const rota = (nome, fn, { tela = null, cache = true } = {}) => [
   async (req, res) => {
     try {
       const executar = () => Promise.resolve(fn(req));
-      res.json(await (cache ? comCache({ nome, query: req.query }, executar) : executar()));
+      // a exportação completa (limite=todos) não entra no cache: são milhares de
+      // linhas pedidas uma vez, e ocupariam o lugar das telas no LRU
+      const usaCache = cache && req.query.limite !== 'todos';
+      res.json(await (usaCache ? comCache({ nome, query: req.query }, executar) : executar()));
     } catch (err) {
       const status = err.status || 500;
       // 400 é culpa do pedido e a mensagem já é para ler; 500 é problema nosso e a
@@ -46,32 +49,51 @@ const rota = (nome, fn, { tela = null, cache = true } = {}) => [
   },
 ];
 
-geral.get('/native/serie', ...rota('native/serie', (req) => native.serie(filtrosDaQuery(req)), { tela: 'geral-native' }));
-geral.get('/native/detalhado', ...rota('native/detalhado', (req) => native.detalhado(filtrosDaQuery(req), Number(req.query.limite) || 500), { tela: 'geral-native' }));
-geral.get('/native/faixas', ...rota('native/faixas', (req) => native.faixas(filtrosDaQuery(req)), { tela: 'geral-native' }));
-geral.get('/native/filtros', ...rota('native/filtros', (req) => native.filtrosDisponiveis(filtrosDaQuery(req)), { tela: 'geral-native' }));
+/** Filtros das telas do GERAL: o período tem piso em 01/01/2026 (D-11). */
+const filtrosGeral = (req) => filtrosDaQuery(req, { piso: INICIO_GERAL });
 
-geral.get('/matrix/serie', ...rota('matrix/serie', (req) => matrix.serie(filtrosDaQuery(req)), { tela: 'geral-matrix' }));
-geral.get('/matrix/detalhado', ...rota('matrix/detalhado', (req) => matrix.detalhado(filtrosDaQuery(req), Number(req.query.limite) || 500), { tela: 'geral-matrix' }));
-geral.get('/matrix/faixas', ...rota('matrix/faixas', (req) => matrix.faixas(filtrosDaQuery(req)), { tela: 'geral-matrix' }));
-geral.get('/matrix/filtros', ...rota('matrix/filtros', (req) => matrix.filtrosDisponiveis(filtrosDaQuery(req)), { tela: 'geral-matrix' }));
+/**
+ * Linhas do relatório detalhado. A tela pede 500 (o padrão); o CSV pede `todos`
+ * (D-10, opção B), com um teto para um período enorme não derrubar o servidor.
+ */
+const LIMITE_EXPORTACAO = 200000;
+const limiteDe = (req) => {
+  if (req.query.limite === 'todos') return LIMITE_EXPORTACAO;
+  const n = Number(req.query.limite);
+  return Number.isInteger(n) && n > 0 ? Math.min(n, LIMITE_EXPORTACAO) : 500;
+};
 
-geral.get('/csat-matrix/serie', ...rota('csat-matrix/serie', (req) => csat.serieMatrix(filtrosDaQuery(req)), { tela: 'geral-csat-matrix' }));
-geral.get('/csat-matrix/detalhado', ...rota('csat-matrix/detalhado', (req) => csat.detalhadoMatrix(filtrosDaQuery(req), Number(req.query.limite) || 500), { tela: 'geral-csat-matrix' }));
-geral.get('/csat-matrix/filtros', ...rota('csat-matrix/filtros', (req) => csat.filtrosMatrix(filtrosDaQuery(req)), { tela: 'geral-csat-matrix' }));
+geral.get('/native/serie', ...rota('native/serie', (req) => native.serie(filtrosGeral(req)), { tela: 'geral-native' }));
+geral.get('/native/detalhado', ...rota('native/detalhado', (req) => native.detalhado(filtrosGeral(req), limiteDe(req)), { tela: 'geral-native' }));
+geral.get('/native/detalhado/total', ...rota('native/detalhado/total', (req) => native.totalDetalhado(filtrosGeral(req)), { tela: 'geral-native' }));
+geral.get('/native/faixas', ...rota('native/faixas', (req) => native.faixas(filtrosGeral(req)), { tela: 'geral-native' }));
+geral.get('/native/filtros', ...rota('native/filtros', (req) => native.filtrosDisponiveis(filtrosGeral(req)), { tela: 'geral-native' }));
+
+geral.get('/matrix/serie', ...rota('matrix/serie', (req) => matrix.serie(filtrosGeral(req)), { tela: 'geral-matrix' }));
+geral.get('/matrix/detalhado', ...rota('matrix/detalhado', (req) => matrix.detalhado(filtrosGeral(req), limiteDe(req)), { tela: 'geral-matrix' }));
+geral.get('/matrix/detalhado/total', ...rota('matrix/detalhado/total', (req) => matrix.totalDetalhado(filtrosGeral(req)), { tela: 'geral-matrix' }));
+geral.get('/matrix/faixas', ...rota('matrix/faixas', (req) => matrix.faixas(filtrosGeral(req)), { tela: 'geral-matrix' }));
+geral.get('/matrix/filtros', ...rota('matrix/filtros', (req) => matrix.filtrosDisponiveis(filtrosGeral(req)), { tela: 'geral-matrix' }));
+
+geral.get('/csat-matrix/serie', ...rota('csat-matrix/serie', (req) => csat.serieMatrix(filtrosGeral(req)), { tela: 'geral-csat-matrix' }));
+geral.get('/csat-matrix/detalhado', ...rota('csat-matrix/detalhado', (req) => csat.detalhadoMatrix(filtrosGeral(req), limiteDe(req)), { tela: 'geral-csat-matrix' }));
+geral.get('/csat-matrix/detalhado/total', ...rota('csat-matrix/detalhado/total', (req) => csat.totalMatrix(filtrosGeral(req)), { tela: 'geral-csat-matrix' }));
+geral.get('/csat-matrix/filtros', ...rota('csat-matrix/filtros', (req) => csat.filtrosMatrix(filtrosGeral(req)), { tela: 'geral-csat-matrix' }));
 geral.get('/csat-matrix/cobertura', ...rota('csat-matrix/cobertura', () => csat.cobertura('matrix'), { tela: 'geral-csat-matrix' }));
 
-geral.get('/csat-native/serie', ...rota('csat-native/serie', (req) => csat.serieNative(filtrosDaQuery(req)), { tela: 'geral-csat-native' }));
-geral.get('/csat-native/detalhado', ...rota('csat-native/detalhado', (req) => csat.detalhadoNative(filtrosDaQuery(req), Number(req.query.limite) || 500), { tela: 'geral-csat-native' }));
-geral.get('/csat-native/filtros', ...rota('csat-native/filtros', (req) => csat.filtrosNative(filtrosDaQuery(req)), { tela: 'geral-csat-native' }));
+geral.get('/csat-native/serie', ...rota('csat-native/serie', (req) => csat.serieNative(filtrosGeral(req)), { tela: 'geral-csat-native' }));
+geral.get('/csat-native/detalhado', ...rota('csat-native/detalhado', (req) => csat.detalhadoNative(filtrosGeral(req), limiteDe(req)), { tela: 'geral-csat-native' }));
+geral.get('/csat-native/detalhado/total', ...rota('csat-native/detalhado/total', (req) => csat.totalNative(filtrosGeral(req)), { tela: 'geral-csat-native' }));
+geral.get('/csat-native/filtros', ...rota('csat-native/filtros', (req) => csat.filtrosNative(filtrosGeral(req)), { tela: 'geral-csat-native' }));
 geral.get('/csat-native/cobertura', ...rota('csat-native/cobertura', () => csat.cobertura('native'), { tela: 'geral-csat-native' }));
 
-geral.get('/produtividade/matrix', ...rota('produtividade/matrix', (req) => produtividade.matrix(filtrosDaQuery(req)), { tela: 'geral-produtividade' }));
-geral.get('/produtividade/native', ...rota('produtividade/native', (req) => produtividade.native(filtrosDaQuery(req)), { tela: 'geral-produtividade' }));
-geral.get('/produtividade/elleven', ...rota('produtividade/elleven', (req) => produtividade.elleven(filtrosDaQuery(req)), { tela: 'geral-produtividade' }));
-geral.get('/produtividade/filtros', ...rota('produtividade/filtros', (req) => produtividade.filtrosDisponiveis(filtrosDaQuery(req)), { tela: 'geral-produtividade' }));
+geral.get('/produtividade/matrix', ...rota('produtividade/matrix', (req) => produtividade.tabela('matrix', filtrosGeral(req)), { tela: 'geral-produtividade' }));
+geral.get('/produtividade/native', ...rota('produtividade/native', (req) => produtividade.tabela('native', filtrosGeral(req)), { tela: 'geral-produtividade' }));
+geral.get('/produtividade/elleven', ...rota('produtividade/elleven', (req) => produtividade.tabela('elleven', filtrosGeral(req)), { tela: 'geral-produtividade' }));
+geral.get('/produtividade/filtros', ...rota('produtividade/filtros', (req) => produtividade.filtrosDisponiveis(filtrosGeral(req)), { tela: 'geral-produtividade' }));
 
-geral.get('/quartis', ...rota('quartis', (req) => quartis.tabela(filtrosDaQuery(req)), { tela: 'geral-quartis' }));
+geral.get('/quartis', ...rota('quartis', (req) => quartis.tabela(filtrosGeral(req)), { tela: 'geral-quartis' }));
+geral.get('/quartis/filtros', ...rota('quartis/filtros', (req) => quartis.filtrosDisponiveis(filtrosGeral(req)), { tela: 'geral-quartis' }));
 
 geral.get('/sup/acompanhamento', ...rota('sup/acompanhamento', (req) => sup.acompanhamento(filtrosDaQuery(req)), { tela: 'sup-executivo' }));
 geral.get('/sup/entrantes', ...rota('sup/entrantes', (req) => sup.entrantes(filtrosDaQuery(req)), { tela: 'sup-executivo' }));
@@ -119,7 +141,9 @@ geral.post('/insights/visual/:id', async (req, res, next) => {
   return exigirAuth({ tela: visual.tela })(req, res, next);
 }, async (req, res) => {
   try {
-    res.json(await gerarInsightsVisual(req.params.id, filtrosDaQuery(req)));
+    const visual = VISUAIS[req.params.id];
+    const filtros = String(visual.tela || '').startsWith('geral-') ? filtrosGeral(req) : filtrosDaQuery(req);
+    res.json(await gerarInsightsVisual(req.params.id, filtros));
   } catch (err) {
     /**
      * Quem define o status manda na mensagem.
@@ -154,7 +178,7 @@ geral.get('/meta', ...rota('meta', async () => {
     fontes: listaFontes,
     // a capa e o botão de IA leem daqui
     iaConfigurada: iaConfigurada(),
-    periodo: { padraoDias: p.padraoDias, maxDias: p.maxDias },
+    periodo: { padraoDias: p.padraoDias, maxDias: p.maxDias, inicioGeral: p.inicioGeral },
     cache: estatisticasCache(),
   };
 }));
