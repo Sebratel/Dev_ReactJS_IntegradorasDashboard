@@ -57,11 +57,21 @@ const iso = (d) => `${d.getFullYear()}-${dois(d.getMonth() + 1)}-${dois(d.getDat
  * apurar 365 dias, e cresce com a janela. A mensagem diz o limite e o que foi
  * pedido, senão o usuário não tem como saber o que corrigir.
  */
-export function periodo(req) {
+export function periodo(req, { piso = null } = {}) {
   const cfg = params();
   const ate = data(req.query.ate, 'final') || new Date();
-  const de = data(req.query.de, 'inicial') || new Date(ate.getTime() - (cfg.padraoDias - 1) * 864e5);
+  let de = data(req.query.de, 'inicial') || new Date(ate.getTime() - (cfg.padraoDias - 1) * 864e5);
   if (de > ate) throw new ErroDePedido('A data inicial do período é posterior à data final.');
+
+  // Piso das telas do GERAL (D-11): os dados começam em 01/01/2026, como no Power BI.
+  // Pedido que começa antes é cortado no piso; pedido inteiro antes dele é recusado.
+  if (piso) {
+    const inicio = data(piso, 'do piso');
+    if (ate < inicio) {
+      throw new ErroDePedido(`Esta tela tem dados a partir de ${piso.split('-').reverse().join('/')}.`);
+    }
+    if (de < inicio) de = inicio;
+  }
 
   const dias = Math.round((ate - de) / 864e5) + 1;
   if (dias > cfg.maxDias) {
@@ -76,9 +86,9 @@ export function periodo(req) {
   return { de: iso(de), ate: iso(ateExclusivo), ateInclusivo: iso(ate), dias };
 }
 
-export function filtrosDaQuery(req) {
+export function filtrosDaQuery(req, opcoes = {}) {
   return {
-    ...periodo(req),
+    ...periodo(req, opcoes),
     granularidade: req.query.granularidade === 'mes' ? 'mes' : 'dia',
     // Native
     sentido: req.query.sentido,
@@ -97,8 +107,16 @@ export function filtrosDaQuery(req) {
     // CSAT
     pergunta: req.query.pergunta,
     nota: req.query.nota,
+    protocolo: req.query.protocolo,
+    // QUARTIS: tipos de protocolo do Elleven (D-08)
+    tipoProtocolo: req.query.tipoProtocolo,
     // comum às duas
     agente: req.query.agente,
+    // QUARTIS: população pela Senior (D-01, D-18)
+    area: req.query.area,
+    time: req.query.time,
+    supervisor: req.query.supervisor,
+    recalcular: req.query.recalcular,
   };
 }
 
@@ -122,6 +140,9 @@ export function descreverRecortes(filtros) {
     ['cidade', filtros.cidade],
     ['pergunta', filtros.pergunta],
     ['resposta', filtros.resposta],
+    ['nota', filtros.nota],
+    ['protocolo', filtros.protocolo],
+    ['tipo de protocolo', filtros.tipoProtocolo],
     ['agente', filtros.agente],
   ]
     .map(([rotulo, valor]) => {

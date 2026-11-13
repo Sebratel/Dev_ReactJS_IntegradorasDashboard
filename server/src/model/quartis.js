@@ -64,6 +64,8 @@ export const INDICADORES = [
   { campo: 'pausaNative', rotulo: 'Tempo pausa Native', indicador: 'Tempo Pausas Native', formato: 'tempo' },
   { campo: 'logadoMatrix', rotulo: 'Tempo logado Matrix', indicador: 'Tempo Logado Matrix', formato: 'tempo' },
   { campo: 'pausaMatrix', rotulo: 'Tempo pausa Matrix', indicador: 'Tempo Pausas Matrix', formato: 'tempo' },
+  { campo: 'csatNative', rotulo: 'CSAT Native', indicador: 'CSAT Native (%)', formato: 'percentual' },
+  { campo: 'adesaoCsatNative', rotulo: 'Adesão CSAT Native', indicador: 'Adesão CSAT Native (%)', formato: 'percentual' },
   { campo: 'csatMatrix', rotulo: 'CSAT Matrix', indicador: 'CSAT Matrix (%)', formato: 'percentual' },
   { campo: 'adesaoCsatMatrix', rotulo: 'Adesão CSAT Matrix', indicador: 'Adesão CSAT Matrix (%)', formato: 'percentual' },
   { campo: 'adesaoElleven', rotulo: 'Adesão Elleven', indicador: 'Adesão Protocolos Elleven (%)', formato: 'percentual' },
@@ -87,7 +89,10 @@ async function pesos() {
  * ativo_receptivo, serviço e status, para o ranking não mudar de forma conforme o
  * recorte da tela.
  */
-async function adesaoCsatMatrix(periodo) {
+async function adesaoCsatMatrix(periodo, notas = []) {
+  // o slicer NOTA PESQUISA (db_matrix_avaliations[nom_valor]) não é removido pela
+  // medida BLIND, então ele recorta as avaliações também aqui (D-08)
+  const filtroNota = notas.length ? ` and nom_valor in (${notas.map(() => '?').join(',')})` : '';
   const [finalizados, avaliados] = await Promise.all([
     maria(
       `select atendente, count(protocolo) n from ${A}.db_matrix
@@ -98,9 +103,9 @@ async function adesaoCsatMatrix(periodo) {
     ),
     maria(
       `select nom_agente, count(distinct num_protocolo) n from ${A}.db_matrix_avaliations
-        where dat_resposta >= ? and dat_resposta < ? and nom_agente <> '' and nom_agente <> 'null'
+        where dat_resposta >= ? and dat_resposta < ? and nom_agente <> '' and nom_agente <> 'null'${filtroNota}
         group by nom_agente`,
-      [periodo.de, periodo.ate],
+      [periodo.de, periodo.ate, ...notas],
     ),
   ]);
   const porBruto = new Map();
@@ -113,16 +118,118 @@ async function adesaoCsatMatrix(periodo) {
   return porBruto;
 }
 
-/** Protocolos abertos no Elleven por agente (chave: e-mail do CRM). */
-async function protocolosElleven(periodo) {
+// ------------------------------------------------------------------ população (D-01, D-18)
+
+const listaDe = (v) => (Array.isArray(v) ? v : v ? String(v).split(',') : []).map((x) => x.trim()).filter(Boolean);
+
+/** Área padrão do ranking: o foco da tela é o time de Suporte (DN-02). */
+export const AREA_PADRAO = 'SUPORTE TÉCNICO';
+
+const semAcento = (x) => x.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase()
+  .replace(/[-.]/g, ' ').replace(/\s+/g, ' ').trim();
+
+/** Bases da Senior que formam o Suporte Técnico (as mesmas 4 do Power BI + variações). */
+const BASES_SUPORTE = new Set([
+  'SUPORTE TECNICO', 'SUPERV SUPORTE TECNICO', 'AUX DE SUPERV DE SUPORTE TECNICO',
+  'TEC SUPORTE TECNICO', 'TEC SUPERV SUPORTE TECNICO',
+]);
+
+/**
+ * Área do colaborador a partir da `operational_base` da Senior. A coluna mistura o
+ * setor com o cargo e com cadastros antigos ("TÉC - SUPORTE TÉCNICO", "SUPERV
+ * SUPORTE TECNICO"), então a área é padronizada aqui: o Suporte junta todas as suas
+ * bases; nas demais sai o prefixo de cadastro técnico e o de supervisão. Se o
+ * negócio padronizar a coluna na origem, esta função vira só um repasse.
+ */
+export function areaDe(base) {
+  if (!base) return null;
+  if (BASES_SUPORTE.has(semAcento(base))) return AREA_PADRAO;
+  return String(base).trim()
+    .replace(/^T[ÉE]C\s*-\s*/i, '')
+    .replace(/^(AUX\.? DE SUPERV\.? DE |AUX\.? SUPERV\.? |SUPERV\.? |SUPER )/i, '')
+    .replace(/\s*-\s*/g, ' ')
+    .trim().toUpperCase();
+}
+
+/**
+ * Registro da Senior que vale no período: admitido antes do fim e não desligado
+ * antes do início. Com mais de um, o de admissão mais recente (quem mudou de área no
+ * meio do mês fica na área nova).
+ */
+function registroNoPeriodo(registros, de, ateExclusivo) {
+  if (!registros?.length) return null;
+  const validos = registros.filter((r) => (!r.admissao || r.admissao < ateExclusivo)
+    && (!r.desligamento || r.desligamento >= de));
+  validos.sort((x, y) => String(y.admissao || '').localeCompare(String(x.admissao || '')));
+  return validos[0] || null;
+}
+
+/** Início da pesquisa da URA do Native: antes disso não há nota nem adesão. */
+const INICIO_CSAT_NATIVE = '2026-09-01';
+
+/**
+ * CSAT Native por agente (DN-15, D-19), com a régua do Matrix:
+ *  - só a pesquisa da URA (origem native_relatorio_107) e só a pergunta Nota1;
+ *  - só a perna que encerrou a ligação (desconexão diferente de Transferida). Quando
+ *    só existe a perna Transferida a nota fica fora do ranking (continua no total da
+ *    tela CSAT NATIVE): a perna final quase nunca está gravada com o mesmo protocolo;
+ *  - resposta contada por (protocolo, pergunta); nota = respostas 3 a 5 / respostas;
+ *  - adesão = protocolos avaliados / atendidas do agente, não perdidas e não
+ *    transferidas, a partir do início da pesquisa;
+ *  - sem os filtros de Fila e Sentido da tela (DN-14).
+ * Chave: nome bruto do agente no Native.
+ */
+async function csatNative(periodo) {
+  const de = periodo.de > INICIO_CSAT_NATIVE ? periodo.de : INICIO_CSAT_NATIVE;
+  if (de >= periodo.ate) return { avaliacoes: [], atendidas: [] };
+  const resposta = "concat(num_protocolo, '|', nom_pergunta)";
+  const [avaliacoes, atendidas] = await Promise.all([
+    maria(
+      `select nom_agente,
+              count(distinct ${resposta}) respostas,
+              count(distinct case when cast(nom_valor as unsigned) between 3 and 5 then ${resposta} end) boas,
+              count(distinct num_protocolo) avaliados
+         from ${A}.db_native_avaliations
+        where origem = 'native_relatorio_107' and nom_pergunta = 'Nota1'
+          and dat_resposta >= ? and dat_resposta < ?
+          and coalesce(desconexao, '') <> 'Transferida'
+          and nom_agente <> '' and nom_agente <> 'null'
+        group by nom_agente`,
+      [de, periodo.ate],
+    ),
+    maria(
+      `select agente,
+              count(case when coalesce(perdida, 0) = 0 and coalesce(desconexao, '') <> 'Transferida' then protocolo end) n
+         from ${A}.db_native
+        where data_hora >= ? and data_hora < ? and agente <> '' and agente <> 'null'
+        group by agente`,
+      [de, periodo.ate],
+    ),
+  ]);
+  return { avaliacoes: avaliacoes.rows, atendidas: atendidas.rows };
+}
+
+/**
+ * Protocolos abertos no Elleven por agente (chave: e-mail do CRM). `tipos` é o slicer
+ * TIPOS PROTOCOLOS do Power BI (allProtocolsVoalle[protocol_type] = incident_types.title),
+ * que a medida BLIND não remove: recorta o numerador da adesão (D-08).
+ */
+async function protocolosElleven(periodo, tipos = []) {
+  const params = [periodo.de, periodo.ate];
+  let filtroTipo = '';
+  if (tipos.length) {
+    filtroTipo = ` and it.title in (${tipos.map((_, i) => `$${i + 3}`).join(',')})`;
+    params.push(...tipos);
+  }
   const { rows } = await pg(
     `select u.email, count(distinct ai.protocol) n
        from erp.assignments a
        join erp.assignment_incidents ai on ai.assignment_id = a.id
+       left join erp.incident_types it on it.id = ai.incident_type_id
        join erp.users u on u.id = a.created_by
-      where a.created >= $1 and a.created < $2 and u.email is not null and u.email <> ''
+      where a.created >= $1 and a.created < $2 and u.email is not null and u.email <> ''${filtroTipo}
       group by u.email`,
-    [periodo.de, periodo.ate],
+    params,
   );
   const mapa = new Map();
   for (const r of rows) {
@@ -165,12 +272,13 @@ export async function tabela(filtros) {
     ? filtros.pergunta
     : [produtividade.PERGUNTA_ATENDIMENTO];
 
-  const [linhasMatrix, linhasNative, csatMatrixPorBruto, ellevenPorEmail, blind, config, mapa] = await Promise.all([
-    produtividade.matrix(filtros, { pergunta: perguntaCsat }),
+  const [linhasMatrix, linhasNative, csatMatrixPorBruto, ellevenPorEmail, blind, csatNat, config, mapa] = await Promise.all([
+    produtividade.matrix(filtros, { pergunta: perguntaCsat, nota: listaDe(filtros.nota) }),
     produtividade.native(filtros),
-    adesaoCsatMatrix(periodo),
-    protocolosElleven(periodo),
+    adesaoCsatMatrix(periodo, listaDe(filtros.nota)),
+    protocolosElleven(periodo, listaDe(filtros.tipoProtocolo)),
     atendimentosBlind(periodo),
+    csatNative(periodo),
     pesos(),
     mapaAgentes(),
   ]);
@@ -217,6 +325,30 @@ export async function tabela(filtros) {
     if (alvo && v.finalizados) alvo.adesaoCsatMatrix = v.avaliados / v.finalizados;
   }
 
+  // CSAT Native (D-19): soma os perfis do agente antes de dividir
+  const porAgenteCsatNat = new Map();
+  const acc = (chave) => {
+    if (!porAgenteCsatNat.has(chave)) porAgenteCsatNat.set(chave, { respostas: 0, boas: 0, avaliados: 0, atendidas: 0 });
+    return porAgenteCsatNat.get(chave);
+  };
+  const chaveNative = (bruto) => {
+    const ag = mapa.porAgenteNative.get(bruto);
+    return ag ? ag.email : `bruto:${bruto}`;
+  };
+  for (const r of csatNat.avaliacoes) {
+    const a = acc(chaveNative(r.nom_agente));
+    a.respostas += Number(r.respostas) || 0;
+    a.boas += Number(r.boas) || 0;
+    a.avaliados += Number(r.avaliados) || 0;
+  }
+  for (const r of csatNat.atendidas) acc(chaveNative(r.agente)).atendidas += Number(r.n) || 0;
+  for (const [chave, v] of porAgenteCsatNat) {
+    const alvo = porEmail.get(chave);
+    if (!alvo) continue;
+    if (v.respostas) alvo.csatNative = v.boas / v.respostas;
+    if (v.atendidas && v.avaliados) alvo.adesaoCsatNative = v.avaliados / v.atendidas;
+  }
+
   // adesão Elleven: protocolos abertos ÷ atendimentos dos dois sistemas, sem os filtros
   // da tela (#adesaoprot_BLIND do modelo, D-04)
   const atendimentosSemFiltro = new Map();
@@ -236,7 +368,32 @@ export async function tabela(filtros) {
     a.adesaoElleven = atendimentos ? protocolos / atendimentos : null;
   }
 
-  const colaboradores = [...porEmail.values()];
+  const todos = [...porEmail.values()];
+
+  // Senior: área, time e supervisor do registro que cobre o período (D-01, D-18)
+  for (const c of todos) {
+    const ag = c.email ? mapa.porEmail.get(c.email) : null;
+    const reg = registroNoPeriodo(ag?.senior, filtros.de, filtros.ate);
+    c.area = reg ? areaDe(reg.base) : null;
+    c.time = reg?.time || null;
+    c.supervisor = reg?.supervisor || null;
+  }
+
+  // Quem entra no ranking: a ÁREA define (padrão Suporte Técnico); sem cadastro na
+  // Senior no período, fica fora. Time, Supervisor e Agente só filtram as linhas
+  // (DN-11), salvo se a tela pedir para recalcular dentro do recorte (como o
+  // Power BI faz ao filtrar o supervisor).
+  const areasMarcadas = listaDe(filtros.area);
+  const areas = areasMarcadas.length ? areasMarcadas : [AREA_PADRAO];
+  const times = listaDe(filtros.time);
+  const supervisores = listaDe(filtros.supervisor);
+  const agentes = listaDe(filtros.agente);
+  const recalcular = String(filtros.recalcular) === '1';
+  const daArea = todos.filter((c) => c.area && areas.includes(c.area));
+  const exibe = (c) => (!times.length || times.includes(c.time))
+    && (!supervisores.length || supervisores.includes(c.supervisor))
+    && (!agentes.length || agentes.includes(c.colaborador));
+  const colaboradores = recalcular ? daArea.filter(exibe) : daArea;
 
   // cortes de quartil por indicador, sobre quem tem valor > 0
   const cortes = {};
@@ -289,7 +446,53 @@ export async function tabela(filtros) {
       menorEhMelhor: config.get(i.indicador)?.menorEhMelhor ?? true,
     })),
     colaboradores: colaboradores
-      .filter((c) => c.notaFinal !== null)
+      .filter((c) => c.notaFinal !== null && exibe(c))
       .sort((a, b) => (b.notaFinal || 0) - (a.notaFinal || 0)),
+    // como o ranking foi montado, para a tela dizer
+    ranking: { areas, recalculado: recalcular, populacao: colaboradores.filter((c) => c.notaFinal !== null).length },
+    // opções dos filtros: áreas de quem tem dado no período; o resto dentro das áreas marcadas
+    opcoes: {
+      area: [...new Set(todos.map((c) => c.area).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR')),
+      time: [...new Set(daArea.map((c) => c.time).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR')),
+      supervisor: [...new Set(daArea.map((c) => c.supervisor).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR')),
+      agente: [...new Set(daArea.map((c) => c.colaborador).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR')),
+    },
+  };
+}
+
+/**
+ * Opções dos slicers da tela (D-08): os recortes de métrica do Power BI. Área, Time,
+ * Supervisor e Agente vêm junto com a tabela, porque dependem da Senior no período.
+ */
+export async function filtrosDisponiveis(filtros) {
+  const p = [filtros.de, filtros.ate];
+  const [servico, ativoReceptivo, status, fila, sentido, nota, pergunta, tipos] = await Promise.all([
+    maria(`select distinct servico v from ${A}.db_matrix where data_atendimento >= ? and data_atendimento < ? and servico <> '' order by v`, p),
+    maria(`select distinct CASE ativo_receptivo WHEN '1' THEN 'Receptivo' WHEN '0' THEN 'Ativo' ELSE ativo_receptivo END v
+             from ${A}.db_matrix where data_atendimento >= ? and data_atendimento < ? and ativo_receptivo is not null order by v`, p),
+    maria(`select distinct CASE status WHEN 3 THEN 'Finalizado' WHEN 6 THEN 'Transferido' ELSE CAST(status AS CHAR) END v
+             from ${A}.db_matrix where data_atendimento >= ? and data_atendimento < ? and status is not null order by v`, p),
+    maria(`select distinct fila v from ${A}.db_native where data_hora >= ? and data_hora < ? and fila <> '' order by v`, p),
+    maria(`select distinct sentido v from ${A}.db_native where data_hora >= ? and data_hora < ? and sentido <> '' order by v`, p),
+    maria(`select distinct nom_valor v from ${A}.db_matrix_avaliations where dat_resposta >= ? and dat_resposta < ? and nom_valor <> '' order by cast(nom_valor as unsigned)`, p),
+    maria(`select distinct nom_pergunta v from ${A}.db_matrix_avaliations where dat_resposta >= ? and dat_resposta < ? and nom_pergunta <> '' order by v`, p),
+    pg(`select distinct it.title v
+          from erp.assignments a
+          join erp.assignment_incidents ai on ai.assignment_id = a.id
+          join erp.incident_types it on it.id = ai.incident_type_id
+         where a.created >= $1 and a.created < $2 and it.title is not null and it.title <> ''
+         order by v`, p),
+  ]);
+  const valores = (r) => r.rows.map((x) => x.v).filter(Boolean);
+  return {
+    servico: valores(servico),
+    ativoReceptivo: valores(ativoReceptivo),
+    status: valores(status),
+    fila: valores(fila),
+    sentido: valores(sentido),
+    nota: valores(nota),
+    pergunta: valores(pergunta),
+    tipoProtocolo: valores(tipos),
+    perguntaPadrao: produtividade.PERGUNTA_ATENDIMENTO,
   };
 }

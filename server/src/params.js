@@ -39,6 +39,13 @@ const arquivo = () => (process.env.PARAMS_PATH
  */
 const PADRAO = { padraoDias: 60, maxDias: 365 };
 
+/**
+ * Primeiro dia com dado nas telas do GERAL (D-11, decisão de 12/11/2026): o Power BI
+ * corta em 01/01/2026 e 2025 não é necessário. A abertura (padraoDias) e o teto
+ * (maxDias) continuam valendo; isto é só o piso.
+ */
+export const INICIO_GERAL = '2026-01-01';
+
 /** Acima disso não é escolha, é engano: nenhuma tela daqui compara 10 anos. */
 const LIMITE_ABSOLUTO = 1826; // 5 anos
 
@@ -83,6 +90,7 @@ export function params() {
     origem: inteiro(salvo.padraoDias) || inteiro(salvo.maxDias) ? 'tela' : 'env',
     semente: base,
     limiteAbsoluto: LIMITE_ABSOLUTO,
+    inicioGeral: INICIO_GERAL,
     atualizadoEm: salvo.atualizadoEm || null,
     atualizadoPor: salvo.atualizadoPor || null,
   };
