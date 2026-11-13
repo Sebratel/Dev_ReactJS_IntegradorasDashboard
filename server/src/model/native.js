@@ -77,9 +77,8 @@ export async function serie(filtros) {
 
   // Médias em SEGUNDOS, como as medidas TMA_Native_Segundos/TME_Native_Segundos do
   // modelo. A coluna TMA_minutes/TME_minutes trunca para minuto inteiro (INT()), e
-  // como a maioria das esperas é menor que 60s a média por ela dá quase zero — foi
-  // o que levou a série "Média de TME" do relatório original a usar SOMA no lugar
-  // de média para a linha aparecer.
+  // como a maioria das esperas é menor que 60s a média por ela dá quase zero. O
+  // Power BI faz média (Avg) nessas linhas, não soma (conferido no .pbip, D-12).
   // `perdida` é NULL (atendida) ou 1 (perdida) — nunca 0. Na origem "atendidas" é
   // `CountNonNull(protocolo)`, ou seja o TOTAL, com as perdidas dentro: as duas
   // colunas do gráfico não somavam o total, uma continha a outra. Aqui "atendidas"
@@ -112,6 +111,13 @@ const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'o
 function rotuloMes(periodo) {
   const [ano, mes] = periodo.split('-');
   return `${MESES[Number(mes) - 1]}/${ano.slice(2)}`;
+}
+
+/** Quantas chamadas o relatório detalhado tem no recorte (a tela mostra 500, D-10). */
+export async function totalDetalhado(filtros) {
+  const { sql: onde, params } = await condicoes(filtros);
+  const { rows } = await query(`select count(*) n from ${TABELA} where ${onde}`, params);
+  return { total: Number(rows[0]?.n) || 0 };
 }
 
 /** Amostra do relatório detalhado (a tabela da origem é uma listagem de chamadas). */

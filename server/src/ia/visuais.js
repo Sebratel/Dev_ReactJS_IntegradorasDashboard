@@ -60,9 +60,9 @@ export const VISUAIS = {
     tela: 'geral-matrix',
     titulo: 'Indicadores Matrix',
     oQueE: 'Evolução do MatrixGO no período: atendimentos e transferidas em colunas, TMA e TME '
-      + 'em linha. TMA e TME são MEDIANAS em segundos, não médias — 7% das conversas ficam abertas '
-      + 'mais de 24h porque `data_finalizacao` marca quando alguém fecha a conversa, não quando o '
-      + 'atendimento acaba, e isso levaria a média para 6h34 contra 26 min de mediana.',
+      + 'em linha. TMA e TME são MÉDIAS em segundos, como na plataforma Matrix. `data_finalizacao` '
+      + 'marca quando alguém fecha a conversa, não quando o atendimento acaba, então conversa '
+      + 'esquecida aberta puxa a média para cima.',
     montar: (f) => matrix.serie(f),
     recorte: (d) => ({ serie: serieEnxuta(d) }),
   },

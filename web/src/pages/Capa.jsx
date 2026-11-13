@@ -192,8 +192,8 @@ export function Capa() {
                 <li>
                   <b>Matrix:</b> o TMA usa <code>data_finalizacao</code>, que marca quando alguém
                   fecha a conversa — não quando o atendimento termina. Nas telas do relatório GERAL
-                  ele sai como <b>mediana</b>, porque 7% das conversas ficam abertas mais de 24h e
-                  levam a média para 6h34 contra 26 min de mediana.
+                  ele sai como <b>média</b>, como na própria plataforma Matrix e no Power BI;
+                  conversa esquecida aberta pesa nessa média.
                 </li>
                 <li>
                   <b>Native:</b> vem das colunas de duração da própria base, e sai como{' '}

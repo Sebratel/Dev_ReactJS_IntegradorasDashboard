@@ -54,7 +54,7 @@ export const TELAS = [
    */
   { id: 'capa', relatorio: 'Capa', curto: 'Capa', label: 'Capa', rota: '/capa', descricao: 'Objetivo do dashboard, canais atendidos, estado das bases e como ler os indicadores' },
   // GERAL — Relatórios Detalhados Integradoras
-  { id: 'geral-matrix', relatorio: 'Geral', curto: 'Matrix', label: 'Geral · Matrix', rota: '/geral/matrix', descricao: 'Indicadores do MatrixGO: atendimentos, TMA e TME medianos, faixas de espera' },
+  { id: 'geral-matrix', relatorio: 'Geral', curto: 'Matrix', label: 'Geral · Matrix', rota: '/geral/matrix', descricao: 'Indicadores do MatrixGO: atendimentos, TMA e TME médios, faixas de espera' },
   { id: 'geral-csat-matrix', relatorio: 'Geral', curto: 'CSAT Matrix', label: 'Geral · CSAT Matrix', rota: '/geral/csat-matrix', descricao: 'Pesquisa de satisfação e adesão do MatrixGO' },
   { id: 'geral-native', relatorio: 'Geral', curto: 'Native', label: 'Geral · Native', rota: '/geral/native', descricao: 'Indicadores do Native Infinity: atendimentos, TMA, TME e perdidas' },
   { id: 'geral-csat-native', relatorio: 'Geral', curto: 'CSAT Native', label: 'Geral · CSAT Native', rota: '/geral/csat-native', descricao: 'Pesquisa de satisfação da URA do Native (desde 01/09/2026)' },
