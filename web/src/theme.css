@@ -647,6 +647,14 @@ table.matrix td {
 }
 table.matrix .total, table.matrix th.total { background: #FDF7E0 !important; font-weight: 800; }
 
+/* QUARTIS: as 30 colunas cabem na largura da tela sem diminuir a letra. O título
+   quebra em até 3 linhas ("Tempo logado Native") e a coluna fica da largura do
+   valor, não do título; o nome continua fixo à esquerda se ainda faltar espaço. */
+table.matrix.compacta { width: 100%; }
+table.matrix.compacta th:not(.rowhead) { white-space: normal; line-height: 1.2; vertical-align: bottom; padding: 5px 3px; }
+table.matrix.compacta td { padding: 4px 3px; min-width: 0; }
+table.matrix.compacta td.rowhead, table.matrix.compacta th.rowhead { min-width: 210px; max-width: 210px; padding-left: 6px; }
+
 /* ------------------------------------------------------------- diversos */
 .loading, .empty {
   display: grid; place-items: center;
