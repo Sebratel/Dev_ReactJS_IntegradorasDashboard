@@ -13,8 +13,11 @@ import { hmsSeg, int, pct } from '../format';
  * modelo; o texto sai da luminância do fundo (o amarelo do Q2 pede texto escuro, o
  * vermelho do Q4 pede claro).
  *
- * Área e Supervisor vêm da Senior (db_senior_collaborators), não da planilha do
- * Google Sheets da origem (DN-02). A área define quem entra no ranking; Supervisor e
+ * Área, Cargo e Supervisor vêm da Senior (db_senior_collaborators), não da planilha
+ * do Google Sheets da origem (DN-02). A área e o cargo definem quem entra no ranking:
+ * o Cargo (DN-18) é agrupado sem nível (Operador, Jovem Aprendiz, Auxiliar de
+ * Supervisão, Supervisor) e abre com todos — o gestor tira quem não quer comparar e
+ * os cortes são refeitos sem essas pessoas. Este filtro só existe no painel. Supervisor e
  * Agente só filtram as linhas, a não ser que "Quartis: No recorte" esteja ligado
  * (D-01, D-18). Sem filtro de Time: o campo `team` da Senior traz "SVA"/"ADM" e não
  * distingue times (decisão de 17/11/2026).
@@ -216,6 +219,7 @@ function MatrizQuartis({ indicadores, colaboradores: brutos }) {
     const colunas = [
       { key: 'colaborador', titulo: 'Colaborador' },
       { key: 'email', titulo: 'E-mail', fmt: (v) => v || '—' },
+      { key: 'cargo', titulo: 'Cargo', fmt: (v) => v || '—' },
       {
         key: 'indicadoresContados',
         titulo: 'Indicadores na nota',
@@ -312,6 +316,7 @@ export function Quartis() {
     pergunta: lista('pergunta'),
     tipoProtocolo: lista('tipoProtocolo'),
     area: lista('area'),
+    cargo: lista('cargo'),
     supervisor: lista('supervisor'),
     agente: lista('agente'),
     recalcular: recalcular ? '1' : '',
@@ -334,6 +339,7 @@ export function Quartis() {
         <span className="rotulo">Filtros</span>
         <PeriodoQuartis de={valores.de} ate={valores.ate} onChange={(de, ate) => { definirVarios({ de, ate }); }} />
         <Filtro nome="Área" opcoes={senior.area || [AREA_PADRAO]} marcados={lista('area')} onChange={(v) => definir('area', v)} />
+        <Filtro nome="Cargo" opcoes={senior.cargo || []} marcados={lista('cargo')} onChange={(v) => definir('cargo', v)} />
         <Filtro nome="Supervisor" opcoes={senior.supervisor || []} marcados={lista('supervisor')} onChange={(v) => definir('supervisor', v)} />
         <Filtro nome="Agente" opcoes={senior.agente || []} marcados={lista('agente')} onChange={(v) => definir('agente', v)} />
         <div className={`filtro${recalcular ? ' ativo' : ''}`}>
@@ -361,7 +367,9 @@ export function Quartis() {
         className="v-matriz"
         title="Desempenho colaboradores por quartis"
         sub={`${int(colaboradores.length)} colaboradores`
-          + (ranking ? ` · quartis ${ranking.recalculado ? 'recalculados no recorte' : `pela área ${ranking.areas.join(', ')}`} (${int(ranking.populacao)} no ranking)` : '')
+          + (ranking ? ` · quartis ${ranking.recalculado ? 'recalculados no recorte' : `pela área ${ranking.areas.join(', ')}`}`
+            + (ranking.cargos?.length ? ` · cargos ${ranking.cargos.join(', ')}` : '')
+            + ` (${int(ranking.populacao)} no ranking)` : '')
           + ' · nota ponderada pelos pesos de workloads_quartiles'
           + ` · ${comPeso.length} indicadores com peso (os marcados com * têm peso 0 e não entram na nota)`
           + ' · indicador sem dado no período sai da conta dos dois lados'}
