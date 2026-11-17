@@ -96,6 +96,9 @@ function achaOuCria(base, mapa, bruto, agrupar) {
 
 const num = (v) => (v === null || v === undefined ? null : Number(v));
 const media = (soma, n) => (n ? Math.round(soma / n) : null);
+// valor sem arredondar: os QUARTIS classificam por ele e arredondam só na tela, como
+// o Power BI (com o segundo inteiro, quem fica no corte empatava e subia de quartil)
+const exata = (soma, n) => (n ? soma / n : null);
 
 /** Pergunta do CSAT Matrix que entra nos QUARTIS (DN-09). */
 export const PERGUNTA_ATENDIMENTO = 'Como você se sentiu em relação ao atendimento da pessoa que falou com você?';
@@ -211,6 +214,12 @@ export async function matrix(filtros, opcoes = {}) {
       csat: a.respostas ? a.boas / a.respostas : null,
       logadoDiaSeg: dias ? Math.round((a.segLogado || 0) / dias) : null,
       pausaDiaSeg: dias ? Math.round((a.segPausado || 0) / dias) : null,
+      exato: {
+        tma: exata(a.tmaSoma, a.tmaN),
+        tme: exata(a.tmeSoma, a.tmeN),
+        logadoDia: exata(a.segLogado || 0, dias),
+        pausaDia: exata(a.segPausado || 0, dias),
+      },
     };
   }).sort((x, y) => y.atendimentos - x.atendimentos);
 }
@@ -303,6 +312,12 @@ export async function native(filtros, opcoes = {}) {
       tmeSeg: media(a.tmeSoma, a.tmeN),
       logadoDiaSeg: dias ? Math.round((a.segLogado || 0) / dias) : null,
       pausaDiaSeg: diasPausa ? Math.round((a.segPausado || 0) / diasPausa) : null,
+      exato: {
+        tma: exata(a.tmaSoma, a.tmaN),
+        tme: exata(a.tmeSoma, a.tmeN),
+        logadoDia: exata(a.segLogado || 0, dias),
+        pausaDia: exata(a.segPausado || 0, diasPausa),
+      },
     };
   }).sort((x, y) => y.atendimentos - x.atendimentos);
 }

@@ -114,6 +114,7 @@ export function filtrosDaQuery(req, opcoes = {}) {
     agente: req.query.agente,
     // QUARTIS: população pela Senior (D-01, D-18)
     area: req.query.area,
+    cargo: req.query.cargo,
     supervisor: req.query.supervisor,
     recalcular: req.query.recalcular,
   };

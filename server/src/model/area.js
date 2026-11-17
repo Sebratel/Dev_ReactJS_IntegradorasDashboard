@@ -57,3 +57,74 @@ export function areaDe(base, { coordenador = null, coordenadoresSuporte = null }
     .replace(/\s*-\s*/g, ' ')
     .trim().toUpperCase();
 }
+
+/**
+ * Cargo agrupado, sem nível (filtro Cargo do QUARTIS, DN-18). A Senior grava o cargo
+ * com o nível ("OPER DE SUPORTE TECNICO N2", "SUPERVISOR DE SUPORTE TÉCNICO N3"); o
+ * gestor filtra pelo papel, não pelo nível. Os papéis do Suporte viram um grupo
+ * (Operador, Auxiliar de Supervisão...); os outros cargos ficam com o próprio nome,
+ * sem o nível em nenhuma das formas usadas na Senior (N2, N IV, NÍVEL 1, PLENO I,
+ * JR, SÊNIOR) e com as abreviações mais comuns por extenso (ASSIST, AUX, SUPERV,
+ * ADM, DPTO). É uma regra, não um de-para: a padronização completa de cargo e área
+ * para a empresa toda está em aberto (DN-19).
+ */
+export const SEM_CARGO = 'Sem cargo na Senior';
+
+// nível no fim do cargo, em todas as formas da Senior; aplicado até não sobrar nada
+const NIVEIS = [
+  /\s*[-–]?\s*\b(N[ÍI]VEL|N\.?)\s*(\d+|[IVX]+)\s*$/i,
+  /\s*[-–]?\s*\b(JR|J[ÚU]NIOR|PL|PLENO|SR|S[ÊE]NIOR)\s*$/i,
+  /\s+\b(I|II|III|IV|V)\s*$/,
+  /\s*[-–]\s*$/,
+];
+// abreviação -> por extenso; as do primeiro termo só valem no começo do cargo
+const ABREVIACOES_INICIO = [
+  [/^ASSIST?\.?(?=\s)/, 'ASSISTENTE'],
+  [/^AUX\.?(?=\s)/, 'AUXILIAR'],
+  [/^SUPERV\.?(?=\s)/, 'SUPERVISOR'],
+  [/^OPER\.?(?=\s)/, 'OPERADOR'],
+];
+const ABREVIACOES = [
+  [/\bADM\b\.?/g, 'ADMINISTRATIVO'],
+  [/\bDPTO\b\.?/g, 'DEPARTAMENTO'],
+  [/\bDESENV(OL)?\b\.?/g, 'DESENVOLVIMENTO'],
+];
+const MINUSCULAS = new Set(['DE', 'DA', 'DO', 'DAS', 'DOS', 'E', 'EM']);
+
+function semNivel(cargo) {
+  let c = String(cargo).toUpperCase().replace(/\s+/g, ' ').trim();
+  let antes;
+  do {
+    antes = c;
+    for (const re of NIVEIS) c = c.replace(re, '').trim();
+  } while (c !== antes && c);
+  for (const [re, por] of ABREVIACOES_INICIO) c = c.replace(re, por);
+  for (const [re, por] of ABREVIACOES) c = c.replace(re, por);
+  // acento que a Senior às vezes perde no fim da palavra (OPERAÇOES, SELEÇAO)
+  return c.replace(/ÇOES\b/g, 'ÇÕES').replace(/ÇAO\b/g, 'ÇÃO').replace(/\s+/g, ' ').trim();
+}
+
+// siglas que ficam em maiúsculas no título
+const SIGLAS = new Set(['TI', 'B2B', 'AC', 'RH', 'DP', 'CGR', 'COR', 'FTTX', 'NOC']);
+const titulo = (c) => c.toLowerCase().split(' ')
+  .map((p, i) => {
+    const P = p.toUpperCase();
+    if (SIGLAS.has(P)) return P;
+    if (i > 0 && MINUSCULAS.has(P)) return p;
+    return p.charAt(0).toUpperCase() + p.slice(1);
+  })
+  .join(' ');
+
+export function cargoDe(position) {
+  if (!semAcento(position)) return SEM_CARGO;
+  // grupos olhados já com a abreviação por extenso ("SUPERV." -> SUPERVISOR)
+  const limpo = semNivel(position);
+  const c = semAcento(limpo);
+  if (c.startsWith('JOVEM APRENDIZ')) return 'Jovem Aprendiz';
+  if (/^AUXILIAR (DE )?SUPERV/.test(c)) return 'Auxiliar de Supervisão';
+  if (c.startsWith('SUPERVISOR')) return 'Supervisor';
+  if (c.startsWith('COORDENADOR')) return 'Coordenador';
+  if (c.startsWith('GERENTE')) return 'Gerente';
+  if (c.startsWith('OPERADOR ')) return 'Operador';
+  return limpo ? titulo(limpo) : SEM_CARGO;
+}
