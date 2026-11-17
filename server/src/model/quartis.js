@@ -19,6 +19,10 @@ const A = 'API_WebDeveloper';
  *  - Nota Final = Σ(entrega × peso) / Σ(peso dos indicadores COM dado e peso > 0).
  *
  * TMA/TME entram como MÉDIA (DN-01, QA de 27/10/2026), como no Power BI.
+ *
+ * Os tempos entram no ranking com as casas decimais; só a tela arredonda para o
+ * segundo. Arredondar antes empatava quem caía no corte (TME de 21s com o corte em
+ * 21,0s) e dava um quartil diferente do Power BI (QA de 17/11/2026).
  */
 
 /** Cores por quartil, iguais às medidas `Cor_*` do modelo. */
@@ -268,19 +272,20 @@ export async function tabela(filtros) {
 
   for (const r of linhasMatrix) {
     const a = garante(r.email, r.agente);
-    a.tmaMatrix = r.tmaSeg;
-    a.tmeMatrix = r.tmeSeg;
-    a.logadoMatrix = r.logadoDiaSeg;
-    a.pausaMatrix = r.pausaDiaSeg;
+    // valores exatos: o ranking não arredonda para o segundo (a tela arredonda)
+    a.tmaMatrix = r.exato.tma;
+    a.tmeMatrix = r.exato.tme;
+    a.logadoMatrix = r.exato.logadoDia;
+    a.pausaMatrix = r.exato.pausaDia;
     a.csatMatrix = r.csat;
     a.atendimentosMatrix = r.atendimentos;
   }
   for (const r of linhasNative) {
     const a = garante(r.email, r.agente);
-    a.tmaNative = r.tmaSeg;
-    a.tmeNative = r.tmeSeg;
-    a.logadoNative = r.logadoDiaSeg;
-    a.pausaNative = r.pausaDiaSeg;
+    a.tmaNative = r.exato.tma;
+    a.tmeNative = r.exato.tme;
+    a.logadoNative = r.exato.logadoDia;
+    a.pausaNative = r.exato.pausaDia;
     a.atendimentosNative = r.atendimentos;
   }
 
@@ -351,6 +356,7 @@ export async function tabela(filtros) {
     const reg = registroNoPeriodo(ag?.senior, filtros.de, filtros.ate);
     c.area = reg ? areaDe(reg.base, { coordenador: reg.coordenador, coordenadoresSuporte: mapa.coordenadoresSuporte }) : null;
     c.supervisor = reg?.supervisor || null;
+    c.cargo = reg ? reg.cargo : null;
   }
 
   // Quem entra no ranking: a ÁREA define (padrão Suporte Técnico); sem cadastro na
@@ -359,10 +365,15 @@ export async function tabela(filtros) {
   // Power BI faz ao filtrar o supervisor).
   const areasMarcadas = listaDe(filtros.area);
   const areas = areasMarcadas.length ? areasMarcadas : [AREA_PADRAO];
+  // Cargo (DN-18): como a área, define quem entra no ranking. Sem marcação, todos os
+  // cargos — o gestor tira quem não quer comparar (supervisor, auxiliar, aprendiz) e
+  // os cortes são refeitos sem essas pessoas.
+  const cargos = listaDe(filtros.cargo);
   const supervisores = listaDe(filtros.supervisor);
   const agentes = listaDe(filtros.agente);
   const recalcular = String(filtros.recalcular) === '1';
-  const daArea = todos.filter((c) => c.area && areas.includes(c.area));
+  const naArea = todos.filter((c) => c.area && areas.includes(c.area));
+  const daArea = cargos.length ? naArea.filter((c) => cargos.includes(c.cargo)) : naArea;
   const exibe = (c) => (!supervisores.length || supervisores.includes(c.supervisor))
     && (!agentes.length || agentes.includes(c.colaborador));
   const colaboradores = recalcular ? daArea.filter(exibe) : daArea;
@@ -421,10 +432,11 @@ export async function tabela(filtros) {
       .filter((c) => c.notaFinal !== null && exibe(c))
       .sort((a, b) => (b.notaFinal || 0) - (a.notaFinal || 0)),
     // como o ranking foi montado, para a tela dizer
-    ranking: { areas, recalculado: recalcular, populacao: colaboradores.filter((c) => c.notaFinal !== null).length },
+    ranking: { areas, cargos, recalculado: recalcular, populacao: colaboradores.filter((c) => c.notaFinal !== null).length },
     // opções dos filtros: áreas de quem tem dado no período; o resto dentro das áreas marcadas
     opcoes: {
       area: [...new Set(todos.map((c) => c.area).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR')),
+      cargo: [...new Set(naArea.map((c) => c.cargo).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR')),
       supervisor: [...new Set(daArea.map((c) => c.supervisor).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR')),
       agente: [...new Set(daArea.map((c) => c.colaborador).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR')),
     },

@@ -2,7 +2,7 @@ import { queryFile as pgQuery } from '../db/pg.js';
 import { queryFile as mariaQuery } from '../db/maria.js';
 import { agentesMatrix } from '../integrations/matrixApi.js';
 import { usersNative } from '../integrations/nativeApi.js';
-import { coordenadoresDoSuporte, semAcento } from './area.js';
+import { cargoDe, coordenadoresDoSuporte, semAcento } from './area.js';
 
 const TTL_MS = 10 * 60 * 1000;
 let cache = null;
@@ -54,6 +54,7 @@ export async function mapaAgentes() {
   for (const c of colaboradores.rows) {
     const registro = {
       base: c.operational_base || null,
+      cargo: cargoDe(c.position),
       time: c.team || null,
       supervisor: c.supervisor_name || null,
       coordenador: c.coordinator_name || null,
