@@ -72,6 +72,28 @@ function porAgente(linhas, mapa, chaveBruta, agrupar) {
   return saida;
 }
 
+/**
+ * Acha a linha do agente; se ele não tem atendimento no recorte, cria uma vazia.
+ *
+ * Tempo logado e pausa (e o CSAT do Matrix) não dependem dos filtros de atendimento:
+ * o login é do agente, não da fila, do sentido nem do ativo/receptivo. A plataforma
+ * Native mostra assim no relatório "Agente - Consolidado Atendimento", e o Power BI
+ * também (decisão de 17/11/2026, conferida com o Native em 01/10/2026). Sem isto, quem
+ * só logou ou só fez ativo perdia o tempo logado quando o filtro o deixava sem
+ * atendimento.
+ */
+function achaOuCria(base, mapa, bruto, agrupar) {
+  const { chave, nome, agente } = chaveDe(mapa, bruto, agrupar);
+  if (!base.has(chave)) {
+    base.set(chave, {
+      email: agente?.email || null, agente: nome, equipe: agente?.team || null,
+      semCorrespondencia: !agente && agrupar, atendimentos: 0,
+      tmaSoma: 0, tmaN: 0, tmeSoma: 0, tmeN: 0,
+    });
+  }
+  return base.get(chave);
+}
+
 const num = (v) => (v === null || v === undefined ? null : Number(v));
 const media = (soma, n) => (n ? Math.round(soma / n) : null);
 
@@ -156,7 +178,7 @@ export async function matrix(filtros, opcoes = {}) {
     porAtendenteMatrix, 'atendente', opcoes.agrupar,
   );
 
-  const acha = (bruto) => base.get(chaveDe(porAtendenteMatrix, bruto, opcoes.agrupar).chave);
+  const acha = (bruto) => achaOuCria(base, porAtendenteMatrix, bruto, opcoes.agrupar);
 
   for (const r of csat.rows) {
     const alvo = acha(r.nom_agente);
@@ -251,7 +273,7 @@ export async function native(filtros, opcoes = {}) {
     porAgenteNative, 'agenteBruto', opcoes.agrupar,
   );
 
-  const acha = (bruto) => base.get(chaveDe(porAgenteNative, bruto, opcoes.agrupar).chave);
+  const acha = (bruto) => achaOuCria(base, porAgenteNative, bruto, opcoes.agrupar);
 
   const diasPorAgente = new Map();
   for (const r of login.rows) {
