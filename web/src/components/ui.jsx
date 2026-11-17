@@ -108,18 +108,23 @@ export function BotoesExportar({ itens, nome }) {
 export function Visual({ title, sub, children, flush = false, style, actions, className = 'v-grafico' }) {
   const { itens, registrar } = useRegistroExportar();
 
+  /**
+   * Barra vinho como no painel da Manutenção: título à esquerda, ações (alternador,
+   * Insights, CSV) à direita, e a explicação ABAIXO da barra, em texto discreto —
+   * dentro da barra ela virava uma segunda linha de 10px centralizada, difícil de ler.
+   */
   return (
     <section className={`visual ${className}`} style={style}>
       {title && (
         <header>
-          <span className="titulo">
-            <span>{title}</span>
+          <h2 title={typeof title === 'string' ? title : undefined}>{title}</h2>
+          <span className="acoes">
             {actions}
             <BotoesExportar itens={itens} nome={title} />
           </span>
-          {sub && <span className="sub">{sub}</span>}
         </header>
       )}
+      {title && sub && <p className="visual-sub">{sub}</p>}
       <ProvedorExportar registrar={registrar}>
         <div className={`body${flush ? ' flush' : ''}`}>{children}</div>
       </ProvedorExportar>
@@ -145,9 +150,10 @@ export function Segmentado({ valor, opcoes, onChange, titulo }) {
  */
 export function Kpi({ value, label, small = false, desc = null, title = null }) {
   return (
+    // Rótulo em cima, número embaixo — a leitura do cartão de indicador da Manutenção.
     <div className="kpi" title={title || undefined}>
-      <div className={`value${small ? ' sm' : ''}`}>{value}</div>
       <div className="label">{label}</div>
+      <div className={`value${small ? ' sm' : ''}`}>{value}</div>
       {desc && <div className="desc">{desc}</div>}
     </div>
   );

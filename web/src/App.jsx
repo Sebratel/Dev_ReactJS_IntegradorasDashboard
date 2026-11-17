@@ -23,10 +23,10 @@ import { dataBr, haQuanto, horaBr, labelDataHora } from './format';
  * diferente). Daí o alternador de relatório: cada um mantém os nomes que o time
  * já conhece, sem "Matrix" repetido na mesma barra.
  *
- * O alternador fica na barra do topo, e não numa faixa própria, porque altura é o
- * recurso escasso: uma terceira faixa sairia direto da área útil dos visuais, e em
- * 1366x768 isso já aperta. Ordem das abas = ordem de leitura do `pages.json` de
- * cada relatório.
+ * O alternador fica dentro da faixa de navegação (ver `Navegacao`), e não numa
+ * faixa própria, porque altura é o recurso escasso: uma terceira faixa sai direto
+ * da área útil dos visuais, e em 1366x768 isso já aperta. Ordem das abas = ordem
+ * de leitura do `pages.json` de cada relatório.
  *
  * O `tela` de cada página é o id do ACL (ver `server/src/auth/access.js`): é por
  * ele que a navegação esconde o que a pessoa não pode abrir. Esconder o item NÃO
@@ -44,7 +44,6 @@ const RELATORIOS = [
     id: 'capa',
     label: 'Capa',
     titulo: 'Atendimento ao Cliente · Suporte Técnico',
-    semContagem: true,
     paginas: [
       { path: '/capa', label: 'Capa', tela: 'capa', fim: true },
     ],
@@ -152,20 +151,41 @@ function MenuUsuario() {
   );
 }
 
+/**
+ * Sigla do sistema, como no painel da Manutenção ("MAN · MANUTENÇÃO FTTX"): o topo
+ * diz em que sistema a pessoa está, e o título do meio diz em que TELA.
+ */
+const SISTEMA = 'INT · RELATÓRIOS INTEGRADORAS';
+
+/**
+ * Título do meio do topo = relatório · tela ("Geral · Matrix"). O nome longo do
+ * relatório de origem ("GERAL - Relatórios Detalhados Integradoras") fica no
+ * `title`, para quem procura pelo nome do Power BI.
+ */
+function tituloDaTela(pathname, relatorio) {
+  if (pathname === '/configuracoes') return { texto: 'Configurações', dica: null };
+  const pagina = relatorio.paginas.find((p) => (p.fim ? pathname === p.path : pathname.startsWith(p.path)));
+  if (!pagina) return { texto: relatorio.titulo, dica: null };
+  if (relatorio.paginas.length === 1) return { texto: pagina.label, dica: relatorio.titulo };
+  return { texto: `${relatorio.label} · ${pagina.label}`, dica: relatorio.titulo };
+}
+
 function Topbar({ relatorio }) {
+  const { pathname } = useLocation();
   const { isError } = useHealth();
   const { data: meta } = useMeta();
   const atualizar = useAtualizarAgora();
   const ultimo = meta?.ultimoDado;
+  const titulo = tituloDaTela(pathname, relatorio);
 
   return (
     <header className="topbar">
-      <div className="logo">
+      <NavLink to="/capa" className="logo" title="Ir para a Capa">
         <img src="/logo-circular-sebratel.png" alt="Sebratel" />
-        <span>SEBRATEL</span>
-      </div>
+        <span>{SISTEMA}</span>
+      </NavLink>
 
-      <h1>{relatorio.titulo}</h1>
+      <h1 title={titulo.dica || undefined}>{titulo.texto}</h1>
 
       <div className="updated" title={ultimo ? `Registro mais recente: ${labelDataHora(ultimo)}` : undefined}>
         <span className={`live-dot${isError ? ' error' : ultimo ? '' : ' stale'}`} />
@@ -187,56 +207,62 @@ function Topbar({ relatorio }) {
 }
 
 /**
- * Faixa dos relatórios. Ela existe porque três relatórios diferentes convivem no
- * mesmo dashboard e dois deles têm páginas de mesmo nome — a separação precisa ser
- * estrutural, não um controle discreto no canto. A contagem ao lado do nome dá a
- * dimensão de cada bloco antes de entrar nele.
- */
-function BarraRelatorios({ relatorio, relatorios }) {
-  return (
-    <nav className="barra-relatorios" aria-label="Relatórios">
-      {relatorios.map((r) => (
-        <NavLink
-          key={r.id}
-          to={r.paginas[0]?.path || `/${r.id}`}
-          className={r.id === relatorio.id ? 'on' : ''}
-        >
-          {r.label}
-          {/* a capa não leva contagem: "1" ao lado dela seria ruído */}
-          {!r.semContagem && <span className="quantas">{r.paginas.length}</span>}
-        </NavLink>
-      ))}
-    </nav>
-  );
-}
-
-/**
- * Faixa de telas do relatório aberto.
+ * Navegação numa faixa só, alinhada à esquerda, como no painel da Manutenção:
  *
- * Relatório de uma tela só — a capa — não ganha a faixa: um único item que já
- * está aceso na barra de cima não orienta ninguém, e a faixa custa 36px da área
- * útil. Nesse caso resta só o atalho de Configurações, quando houver.
+ *   CAPA │ [Geral | Suporte | Analíticos] │ MATRIX  CSAT MATRIX  NATIVE …   ⚙ CONFIGURAÇÕES
+ *
+ * Os três relatórios continuam separados — dois deles têm telas de mesmo nome —,
+ * mas o alternador virou um controle segmentado dentro da navegação em vez de uma
+ * faixa escura própria. A faixa custava 40px de altura útil em toda tela.
+ *
+ * Relatório sem tela liberada já saiu da lista antes de chegar aqui; com um
+ * relatório só, o alternador some e sobram as telas dele.
  */
-function PageNav({ relatorio }) {
+function Navegacao({ relatorio, relatorios }) {
   const { ehAdmin } = useSession();
-  if (!relatorio.paginas.length) {
-    return (
-      <nav className="pagenav">
-        <span className="pagenav-vazio">Nenhuma tela deste relatório está liberada para você.</span>
-      </nav>
-    );
-  }
-  if (relatorio.paginas.length === 1 && !ehAdmin) return null;
+  const capa = relatorios.find((r) => r.id === 'capa');
+  const outros = relatorios.filter((r) => r.id !== 'capa');
+  const telas = relatorio.id !== 'capa' && relatorio.paginas.length > 1 ? relatorio.paginas : [];
+
+  if (!relatorios.length && !ehAdmin) return null;
 
   return (
-    <nav className="pagenav">
-      {relatorio.paginas.length > 1 && relatorio.paginas.map((p) => (
+    <nav className="pagenav" aria-label="Telas do painel">
+      {capa && (
+        <NavLink to={capa.paginas[0].path} className={({ isActive }) => (isActive ? 'active' : '')}>
+          {capa.label}
+        </NavLink>
+      )}
+
+      {outros.length > 1 && (
+        <span className="relatorios" role="group" aria-label="Relatório">
+          {outros.map((r) => (
+            <NavLink
+              key={r.id}
+              to={r.paginas[0]?.path || `/${r.id}`}
+              className={r.id === relatorio.id ? 'on' : ''}
+              aria-current={r.id === relatorio.id ? 'true' : undefined}
+              title={r.titulo}
+            >
+              {r.label}
+            </NavLink>
+          ))}
+        </span>
+      )}
+
+      {telas.length > 0 && <span className="divisor" aria-hidden="true" />}
+      {telas.map((p) => (
         <NavLink key={p.path} to={p.path} end={p.fim} className={({ isActive }) => (isActive ? 'active' : '')}>
           {p.label}
         </NavLink>
       ))}
+
+      {!relatorios.length && (
+        <span className="pagenav-vazio">Nenhuma tela está liberada para você.</span>
+      )}
+
       {ehAdmin && (
-        <NavLink to="/configuracoes" className={({ isActive }) => `com-icone${isActive ? ' active' : ''}`}>
+        <NavLink to="/configuracoes" className={({ isActive }) => `com-icone a-direita${isActive ? ' active' : ''}`}>
           <Icone nome="config" tamanho={13} /> Configurações
         </NavLink>
       )}
@@ -284,8 +310,7 @@ export default function App() {
   return (
     <>
       <Topbar relatorio={relatorio} />
-      {relatorios.length > 1 && <BarraRelatorios relatorio={relatorio} relatorios={relatorios} />}
-      <PageNav relatorio={relatorio} />
+      <Navegacao relatorio={relatorio} relatorios={relatorios} />
       <Routes>
         {ROTAS.map((r) => (
           <Route key={r.path} path={r.path} element={podeVer(r.tela) ? r.el : <SemAcesso />} />
