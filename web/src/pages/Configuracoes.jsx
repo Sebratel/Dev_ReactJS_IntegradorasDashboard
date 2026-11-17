@@ -92,7 +92,7 @@ function AbaUsuarios() {
 
       <p className="cfg-nota">
         Esta aba define <b>papéis</b>. Quem não está na lista é visualizador e vê as telas
-        liberadas — quais telas cada um abre é a aba <b>Telas</b>.
+        liberadas — quais telas cada um abre é a aba <b>Acesso por tela</b>.
       </p>
 
       <div className="cfg-form">
@@ -1080,16 +1080,20 @@ function AbaPesos() {
 }
 
 // ---------------------------------------------------------------------------
+/**
+ * As duas primeiras abas têm os nomes da casca padrão (e do painel da Manutenção):
+ * "Usuários e papéis" e "Acesso por tela". As outras três são deste sistema.
+ */
 const ABAS = [
-  { id: 'usuarios', label: 'Usuários', icone: 'pessoas' },
-  { id: 'telas', label: 'Telas', icone: 'tela' },
+  { id: 'usuarios', label: 'Usuários e papéis', icone: 'pessoas' },
+  { id: 'telas', label: 'Acesso por tela', icone: 'tela' },
   { id: 'datas', label: 'Datas', icone: 'calendario' },
   { id: 'pesos', label: 'Pesos dos quartis', icone: 'config' },
   { id: 'ia', label: 'Provedor de IA', icone: 'ia' },
 ];
 
 export default function Configuracoes() {
-  const { ehAdmin } = useSession();
+  const { ehAdmin, usuario } = useSession();
   const [aba, setAba] = useState('usuarios');
 
   if (!ehAdmin) {
@@ -1106,11 +1110,22 @@ export default function Configuracoes() {
 
   return (
     <div className="page">
-      <Visual className="v-auto" title="Configurações" sub="Acessos, recorte de datas, pesos dos quartis e provedor de IA">
-        <div className="cfg-abas">
+      <Visual
+        className="v-auto"
+        title="Configurações"
+        sub={`${usuario?.email || '—'} · ${PAPEL_LABEL[usuario?.papel] || '—'} — quem entra no dashboard e o que cada pessoa enxerga.`}
+      >
+        <div className="cfg-abas" role="tablist">
           {ABAS.map((a) => (
-            <button key={a.id} type="button" className={aba === a.id ? 'on' : ''} onClick={() => setAba(a.id)}>
-              <Icone nome={a.icone} tamanho={13} /> {a.label}
+            <button
+              key={a.id}
+              type="button"
+              role="tab"
+              aria-selected={aba === a.id}
+              className={aba === a.id ? 'on' : ''}
+              onClick={() => setAba(a.id)}
+            >
+              <Icone nome={a.icone} tamanho={14} /> {a.label}
             </button>
           ))}
         </div>
