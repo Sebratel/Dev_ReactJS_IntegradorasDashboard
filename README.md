@@ -111,6 +111,19 @@ administrador, inclusive nas telas de desempenho individual (Produtividade e
 Quartis). Em produção, preencha — e crie um projeto Firebase **próprio deste
 sistema**, sem reaproveitar o de outro setor.
 
+**Pesos dos QUARTIS.** A aba *Pesos dos quartis* das Configurações grava na tabela
+`DB_Technical_Support.workloads_quartiles`, a mesma que o Power BI lê. Para ela
+gravar, preencha `DB_PESOS_USER` e `DB_PESOS_PASSWORD` com um usuário que tenha
+**só** estas permissões (o usuário principal continua somente-leitura):
+
+```sql
+CREATE USER 'dash_pesos'@'%' IDENTIFIED BY '<senha>';
+GRANT SELECT, UPDATE ON DB_Technical_Support.workloads_quartiles TO 'dash_pesos'@'%';
+```
+
+Sem esse usuário a aba abre em modo leitura. O histórico de alterações fica em
+`/app/data/pesos-historico.jsonl`, no mesmo volume das permissões.
+
 Saúde do serviço: `GET /api/geral/health`.
 
 ## Desempenho

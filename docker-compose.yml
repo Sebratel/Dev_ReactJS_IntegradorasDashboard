@@ -49,6 +49,10 @@ services:
       DB_MARIA_USER: ${DB_MARIA_USER}
       DB_MARIA_PASSWORD: ${DB_MARIA_PASSWORD}
       DB_MARIA_PORT: ${DB_MARIA_PORT:-3306}
+      # Aba "Pesos dos quartis" das Configurações: usuário com SELECT e UPDATE só em
+      # DB_Technical_Support.workloads_quartiles. Vazio = a aba abre só para leitura.
+      DB_PESOS_USER: ${DB_PESOS_USER:-}
+      DB_PESOS_PASSWORD: ${DB_PESOS_PASSWORD:-}
 
       # ---- ponte agente -> identidade (APIs externas) ----
       MATRIX_API_URL: ${MATRIX_API_URL:-https://sebratel.matrixdobrasil.ai/rest/v1/agentes}
