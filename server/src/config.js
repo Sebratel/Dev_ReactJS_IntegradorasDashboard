@@ -45,6 +45,17 @@ export const config = {
     timeout_ms: num(process.env.DB_MARIA_TIMEOUT_MS, 60000),
   },
 
+  /**
+   * Usuário de ESCRITA só para os pesos dos QUARTIS (aba Pesos das Configurações).
+   * Separado de propósito: o usuário principal continua somente-leitura, e este deve
+   * ter apenas SELECT e UPDATE em DB_Technical_Support.workloads_quartiles. Sem ele
+   * a aba abre em modo leitura. Host e porta são os do MariaDB acima.
+   */
+  pesos: {
+    user: process.env.DB_PESOS_USER || '',
+    password: process.env.DB_PESOS_PASSWORD || '',
+  },
+
   // Ponte agente -> identidade (nome livre em db_matrix/db_native não tem e-mail).
   // Achadas embutidas no Power Query original; movidas para variável de ambiente aqui.
   matrixApi: {
