@@ -1,6 +1,7 @@
 import { query as maria } from '../db/maria.js';
 import { query as pg } from '../db/pg.js';
 import { mapaAgentes, chaveEmail } from './agentes.js';
+import { AREA_PADRAO, areaDe } from './area.js';
 import * as produtividade from './produtividade.js';
 
 const A = 'API_WebDeveloper';
@@ -122,34 +123,8 @@ async function adesaoCsatMatrix(periodo, notas = []) {
 
 const listaDe = (v) => (Array.isArray(v) ? v : v ? String(v).split(',') : []).map((x) => x.trim()).filter(Boolean);
 
-/** Área padrão do ranking: o foco da tela é o time de Suporte (DN-02). */
-export const AREA_PADRAO = 'SUPORTE TÉCNICO';
-
-const semAcento = (x) => x.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase()
-  .replace(/[-.]/g, ' ').replace(/\s+/g, ' ').trim();
-
-/** Bases da Senior que formam o Suporte Técnico (as mesmas 4 do Power BI + variações). */
-const BASES_SUPORTE = new Set([
-  'SUPORTE TECNICO', 'SUPERV SUPORTE TECNICO', 'AUX DE SUPERV DE SUPORTE TECNICO',
-  'TEC SUPORTE TECNICO', 'TEC SUPERV SUPORTE TECNICO',
-]);
-
-/**
- * Área do colaborador a partir da `operational_base` da Senior. A coluna mistura o
- * setor com o cargo e com cadastros antigos ("TÉC - SUPORTE TÉCNICO", "SUPERV
- * SUPORTE TECNICO"), então a área é padronizada aqui: o Suporte junta todas as suas
- * bases; nas demais sai o prefixo de cadastro técnico e o de supervisão. Se o
- * negócio padronizar a coluna na origem, esta função vira só um repasse.
- */
-export function areaDe(base) {
-  if (!base) return null;
-  if (BASES_SUPORTE.has(semAcento(base))) return AREA_PADRAO;
-  return String(base).trim()
-    .replace(/^T[ÉE]C\s*-\s*/i, '')
-    .replace(/^(AUX\.? DE SUPERV\.? DE |AUX\.? SUPERV\.? |SUPERV\.? |SUPER )/i, '')
-    .replace(/\s*-\s*/g, ' ')
-    .trim().toUpperCase();
-}
+// Área, Suporte e normalização da base: model/area.js (usado também por agentes.js)
+export { AREA_PADRAO, areaDe };
 
 /**
  * Registro da Senior que vale no período: admitido antes do fim e não desligado
@@ -370,28 +345,25 @@ export async function tabela(filtros) {
 
   const todos = [...porEmail.values()];
 
-  // Senior: área, time e supervisor do registro que cobre o período (D-01, D-18)
+  // Senior: área e supervisor do registro que cobre o período (D-01, D-18)
   for (const c of todos) {
     const ag = c.email ? mapa.porEmail.get(c.email) : null;
     const reg = registroNoPeriodo(ag?.senior, filtros.de, filtros.ate);
-    c.area = reg ? areaDe(reg.base) : null;
-    c.time = reg?.time || null;
+    c.area = reg ? areaDe(reg.base, { coordenador: reg.coordenador, coordenadoresSuporte: mapa.coordenadoresSuporte }) : null;
     c.supervisor = reg?.supervisor || null;
   }
 
   // Quem entra no ranking: a ÁREA define (padrão Suporte Técnico); sem cadastro na
-  // Senior no período, fica fora. Time, Supervisor e Agente só filtram as linhas
+  // Senior no período, fica fora. Supervisor e Agente só filtram as linhas
   // (DN-11), salvo se a tela pedir para recalcular dentro do recorte (como o
   // Power BI faz ao filtrar o supervisor).
   const areasMarcadas = listaDe(filtros.area);
   const areas = areasMarcadas.length ? areasMarcadas : [AREA_PADRAO];
-  const times = listaDe(filtros.time);
   const supervisores = listaDe(filtros.supervisor);
   const agentes = listaDe(filtros.agente);
   const recalcular = String(filtros.recalcular) === '1';
   const daArea = todos.filter((c) => c.area && areas.includes(c.area));
-  const exibe = (c) => (!times.length || times.includes(c.time))
-    && (!supervisores.length || supervisores.includes(c.supervisor))
+  const exibe = (c) => (!supervisores.length || supervisores.includes(c.supervisor))
     && (!agentes.length || agentes.includes(c.colaborador));
   const colaboradores = recalcular ? daArea.filter(exibe) : daArea;
 
@@ -453,7 +425,6 @@ export async function tabela(filtros) {
     // opções dos filtros: áreas de quem tem dado no período; o resto dentro das áreas marcadas
     opcoes: {
       area: [...new Set(todos.map((c) => c.area).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR')),
-      time: [...new Set(daArea.map((c) => c.time).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR')),
       supervisor: [...new Set(daArea.map((c) => c.supervisor).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR')),
       agente: [...new Set(daArea.map((c) => c.colaborador).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR')),
     },
@@ -461,7 +432,7 @@ export async function tabela(filtros) {
 }
 
 /**
- * Opções dos slicers da tela (D-08): os recortes de métrica do Power BI. Área, Time,
+ * Opções dos slicers da tela (D-08): os recortes de métrica do Power BI. Área,
  * Supervisor e Agente vêm junto com a tabela, porque dependem da Senior no período.
  */
 export async function filtrosDisponiveis(filtros) {

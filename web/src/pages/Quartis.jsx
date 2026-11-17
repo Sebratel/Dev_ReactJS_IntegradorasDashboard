@@ -13,10 +13,11 @@ import { hmsSeg, int, pct } from '../format';
  * modelo; o texto sai da luminância do fundo (o amarelo do Q2 pede texto escuro, o
  * vermelho do Q4 pede claro).
  *
- * Área, Time e Supervisor vêm da Senior (db_senior_collaborators), não da planilha
- * do Google Sheets da origem (DN-02). A área define quem entra no ranking; Time,
- * Supervisor e Agente só filtram as linhas, a não ser que "Quartis: No recorte"
- * esteja ligado (D-01, D-18).
+ * Área e Supervisor vêm da Senior (db_senior_collaborators), não da planilha do
+ * Google Sheets da origem (DN-02). A área define quem entra no ranking; Supervisor e
+ * Agente só filtram as linhas, a não ser que "Quartis: No recorte" esteja ligado
+ * (D-01, D-18). Sem filtro de Time: o campo `team` da Senior traz "SVA"/"ADM" e não
+ * distingue times (decisão de 17/11/2026).
  *
  * Slicers de métrica do Power BI (D-08, DN-13): Status Matrix (TMA/TME Matrix), Nota
  * Pesquisa (CSAT e adesão CSAT Matrix), Pergunta CSAT (abre na do atendimento) e
@@ -296,7 +297,6 @@ export function Quartis() {
     pergunta: lista('pergunta'),
     tipoProtocolo: lista('tipoProtocolo'),
     area: lista('area'),
-    time: lista('time'),
     supervisor: lista('supervisor'),
     agente: lista('agente'),
     recalcular: recalcular ? '1' : '',
@@ -319,13 +319,12 @@ export function Quartis() {
         <span className="rotulo">Filtros</span>
         <PeriodoQuartis de={valores.de} ate={valores.ate} onChange={(de, ate) => { definirVarios({ de, ate }); }} />
         <Filtro nome="Área" opcoes={senior.area || [AREA_PADRAO]} marcados={lista('area')} onChange={(v) => definir('area', v)} />
-        <Filtro nome="Time" opcoes={senior.time || []} marcados={lista('time')} onChange={(v) => definir('time', v)} />
         <Filtro nome="Supervisor" opcoes={senior.supervisor || []} marcados={lista('supervisor')} onChange={(v) => definir('supervisor', v)} />
         <Filtro nome="Agente" opcoes={senior.agente || []} marcados={lista('agente')} onChange={(v) => definir('agente', v)} />
         <div className={`filtro${recalcular ? ' ativo' : ''}`}>
           <button
             type="button"
-            title="Pela área: o quartil de cada um é o da área inteira; Time, Supervisor e Agente só escondem linhas. No recorte: os quartis são recalculados só com quem está filtrado, como o Power BI faz ao filtrar o supervisor."
+            title="Pela área: o quartil de cada um é o da área inteira; Supervisor e Agente só escondem linhas. No recorte: os quartis são recalculados só com quem está filtrado, como o Power BI faz ao filtrar o supervisor."
             onClick={() => definir('recalcular', recalcular ? '' : '1')}
           >
             <span className="nome">Quartis</span>

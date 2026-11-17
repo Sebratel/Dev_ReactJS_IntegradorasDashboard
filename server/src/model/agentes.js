@@ -2,6 +2,7 @@ import { queryFile as pgQuery } from '../db/pg.js';
 import { queryFile as mariaQuery } from '../db/maria.js';
 import { agentesMatrix } from '../integrations/matrixApi.js';
 import { usersNative } from '../integrations/nativeApi.js';
+import { coordenadoresDoSuporte, semAcento } from './area.js';
 
 const TTL_MS = 10 * 60 * 1000;
 let cache = null;
@@ -36,18 +37,33 @@ export async function mapaAgentes() {
     if (chave && !porEmail.has(chave)) porEmail.set(chave, { email: chave, name: u.name });
   }
 
+  // Nome como segunda chave da ponte com a Senior: lá há cadastro com e-mail vazio
+  // ou pessoal (gmail) — em nov/2026 eram 14 do Suporte admitidos em 2026. Só vale
+  // nome idêntico (sem acento, maiúsculas e espaços) e que aparece uma vez no CRM;
+  // homônimo fica de fora para não juntar duas pessoas.
+  const porNome = new Map();
+  for (const agente of porEmail.values()) {
+    const chave = semAcento(agente.name);
+    if (!chave) continue;
+    porNome.set(chave, porNome.has(chave) ? null : agente);
+  }
+
   // Senior (DN-02): todos os registros da pessoa, porque área, time e supervisor
   // mudam com o tempo e os QUARTIS escolhem o registro que cobre o período.
+  const registrosSenior = [];
   for (const c of colaboradores.rows) {
-    const agente = porEmail.get(chaveEmail(c.email));
-    if (!agente) continue;
-    (agente.senior ||= []).push({
+    const registro = {
       base: c.operational_base || null,
       time: c.team || null,
       supervisor: c.supervisor_name || null,
+      coordenador: c.coordinator_name || null,
       admissao: c.admission_date ? String(c.admission_date).slice(0, 10) : null,
       desligamento: c.termination_date ? String(c.termination_date).slice(0, 10) : null,
-    });
+    };
+    registrosSenior.push(registro);
+    const agente = porEmail.get(chaveEmail(c.email)) || porNome.get(semAcento(c.name));
+    if (!agente) continue;
+    (agente.senior ||= []).push(registro);
   }
   // equipe "de hoje": o registro sem desligamento, senão o de admissão mais recente
   for (const agente of porEmail.values()) {
@@ -72,6 +88,8 @@ export async function mapaAgentes() {
 
   const mapa = {
     porEmail,
+    // quem coordena o Suporte; os aprendizes entram na área por aqui (model/area.js)
+    coordenadoresSuporte: coordenadoresDoSuporte(registrosSenior),
     porAtendenteMatrix,
     porAgenteNative,
     agentes: [...porEmail.values()],
