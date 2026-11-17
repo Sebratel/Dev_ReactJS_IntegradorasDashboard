@@ -10,6 +10,7 @@ import { estatisticasCache, limparCache } from '../core/cache.js';
 import { estado as estadoIA, listarModelos, remover as removerIA, salvar as salvarIA, testar as testarIA } from '../ia/registro.js';
 import { MODELO_PADRAO, ROTULO_TIPO, TIPOS } from '../ia/provedor.js';
 import { listarVisuais } from '../ia/visuais.js';
+import { listar as listarPesos, salvar as salvarPesos } from '../model/pesos.js';
 
 export const admin = Router();
 
@@ -152,6 +153,33 @@ admin.post('/params/restaurar', exigirAuth({ minPapel: 'admin' }), (req, res) =>
 admin.post('/cache/limpar', exigirAuth(), (req, res) => {
   const quantas = limparCache();
   res.json({ ok: true, descartadas: quantas });
+});
+
+// ------------------------------------------------------- pesos dos QUARTIS
+/**
+ * Peso e direção de cada indicador, na tabela que o painel e o Power BI leem
+ * (DB_Technical_Support.workloads_quartiles). Só admin. Depois de salvar o cache é
+ * limpo, senão os QUARTIS continuariam com a nota antiga por até 15 minutos.
+ */
+admin.get('/pesos', exigirAuth({ minPapel: 'admin' }), async (req, res) => {
+  try {
+    res.json(await listarPesos());
+  } catch (err) {
+    console.error('[pesos]', err.message);
+    res.status(500).json({ error: 'Não foi possível ler a tabela de pesos agora.' });
+  }
+});
+
+admin.put('/pesos', exigirAuth({ minPapel: 'admin' }), async (req, res) => {
+  try {
+    const resultado = await salvarPesos(req.body?.mudancas, req.usuario.email);
+    if (resultado.alterados) limparCache();
+    res.json(resultado);
+  } catch (err) {
+    const status = err.status || (err.code ? 500 : 400);
+    if (status === 500) console.error('[pesos]', err.message);
+    res.status(status).json({ error: status === 500 ? 'Não foi possível gravar os pesos. Nada foi alterado.' : err.message });
+  }
 });
 
 // ------------------------------------------------------- provedor de IA

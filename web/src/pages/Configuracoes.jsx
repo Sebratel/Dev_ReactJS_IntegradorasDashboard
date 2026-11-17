@@ -878,11 +878,213 @@ function AbaIA() {
   );
 }
 
+// --------------------------------------------------------------- pesos dos quartis
+/**
+ * Peso e direção de cada indicador dos QUARTIS.
+ *
+ * Grava na tabela DB_Technical_Support.workloads_quartiles, a mesma que o Power BI
+ * lê: mudar aqui muda a nota nos dois. Rascunho como na aba Telas — nada vai para o
+ * banco até o Salvar, e tudo vai numa transação só. Os 13 indicadores são fixos
+ * (cada um é um cálculo no código); criar ou apagar linha continua sendo no banco.
+ */
+const DIRECOES = [
+  { id: 'menor', label: 'Menor é melhor' },
+  { id: 'maior', label: 'Maior é melhor' },
+];
+
+function AbaPesos() {
+  const [estado, setEstado] = useState(null);
+  const [rascunho, setRascunho] = useState({});
+  const [erro, setErro] = useState(null);
+  const [salvando, setSalvando] = useState(false);
+  const [salvo, setSalvo] = useState(null);
+
+  const carregar = useCallback(async () => {
+    try {
+      setEstado(await apiAdmin('/pesos'));
+      setErro(null);
+    } catch (e) { setErro(e); }
+  }, []);
+  useEffect(() => { carregar(); }, [carregar]);
+
+  if (!estado && !erro) return <Loading texto="Lendo a tabela de pesos…" />;
+  if (!estado) return <Erro erro={erro} />;
+
+  const editavel = estado.escritaHabilitada;
+  const atual = (i) => ({ peso: i.peso, direcao: i.direcao, ...rascunho[i.indicador] });
+  const alterados = estado.indicadores.filter((i) => {
+    const r = rascunho[i.indicador];
+    return r && (Number(r.peso) !== i.peso || r.direcao !== i.direcao);
+  });
+  const pesoInvalido = (v) => v === '' || !Number.isInteger(Number(v)) || Number(v) < 0 || Number(v) > estado.pesoMaximo;
+  const invalidos = estado.indicadores.filter((i) => pesoInvalido(atual(i).peso));
+  const soma = estado.indicadores.reduce((s, i) => s + (pesoInvalido(atual(i).peso) ? 0 : Number(atual(i).peso)), 0);
+  const comPeso = estado.indicadores.filter((i) => !pesoInvalido(atual(i).peso) && Number(atual(i).peso) > 0).length;
+
+  const mudar = (i, campo, valor) => {
+    setSalvo(null);
+    setRascunho((r) => ({ ...r, [i.indicador]: { ...atual(i), [campo]: valor } }));
+  };
+
+  const salvar = async () => {
+    setSalvando(true);
+    setErro(null);
+    try {
+      const resultado = await apiAdmin('/pesos', {
+        method: 'PUT',
+        body: JSON.stringify({
+          mudancas: alterados.map((i) => ({ indicador: i.indicador, peso: Number(rascunho[i.indicador].peso), direcao: rascunho[i.indicador].direcao })),
+        }),
+      });
+      setEstado(resultado);
+      setRascunho({});
+      setSalvo(resultado.alterados);
+    } catch (e) { setErro(e); } finally { setSalvando(false); }
+  };
+
+  return (
+    <div className="cfg-bloco">
+      {erro && <Erro erro={erro} />}
+
+      <p className="cfg-nota">
+        Estes pesos ficam na tabela <code>workloads_quartiles</code>, a <b>mesma que o Power BI lê</b>:
+        o que mudar aqui muda a nota final nos dois. Peso <b>0</b> mantém o indicador na tabela dos
+        QUARTIS, mas fora da nota. A nota é Σ(entrega × peso) ÷ Σ(peso dos indicadores com dado).
+      </p>
+
+      {!editavel && (
+        <div className="ras-barra ativa">
+          <Icone nome="cadeado" tamanho={14} />
+          <span>
+            Somente leitura: este servidor não tem o usuário de escrita dos pesos
+            (<code>DB_PESOS_USER</code> e <code>DB_PESOS_PASSWORD</code>). Peça a quem cuida do deploy.
+          </span>
+        </div>
+      )}
+
+      {editavel && (
+        <div className={`ras-barra${alterados.length ? ' ativa' : ''}`}>
+          {alterados.length ? (
+            <>
+              <Icone nome="alerta" tamanho={14} />
+              <span>
+                <b>{alterados.length}</b> {alterados.length === 1 ? 'indicador alterado' : 'indicadores alterados'} e não
+                salvos{invalidos.length ? ` — corrija ${invalidos.length === 1 ? 'o peso inválido' : 'os pesos inválidos'} (0 a ${estado.pesoMaximo})` : ''}.
+              </span>
+              <button type="button" className="cfg-botao ghost" onClick={() => setRascunho({})} disabled={salvando}>
+                Descartar
+              </button>
+              <button type="button" className="cfg-botao" onClick={salvar} disabled={salvando || invalidos.length > 0 || soma === 0}>
+                <Icone nome="ok" tamanho={13} /> {salvando ? 'salvando…' : 'Salvar alterações'}
+              </button>
+            </>
+          ) : (
+            <span>
+              {salvo ? <b className="cfg-aviso ok"><Icone nome="ok" tamanho={13} /> {salvo} {salvo === 1 ? 'alteração gravada' : 'alterações gravadas'} — os QUARTIS já recalculam com os pesos novos.</b>
+                : 'Altere o peso ou a direção e salve. Nada é gravado antes disso.'}
+            </span>
+          )}
+        </div>
+      )}
+
+      <div>
+        <table className="pbi">
+          <thead>
+            <tr>
+              <th className="left">Indicador</th>
+              <th className="left">Nome na tabela</th>
+              <th>Peso</th>
+              <th className="left">Direção</th>
+              <th>Na nota</th>
+            </tr>
+          </thead>
+          <tbody>
+            {estado.indicadores.map((i) => {
+              const a = atual(i);
+              const pendente = alterados.includes(i);
+              return (
+                <tr key={i.indicador}>
+                  <td className="left bold">{i.rotulo}</td>
+                  <td className="left"><code>{i.indicador}</code>{!i.existe && <span className="cfg-tag fixo">sem linha no banco</span>}</td>
+                  <td className={`center${pendente ? ' pendente' : ''}`} style={pendente ? { background: '#FDF3D6' } : undefined}>
+                    <input
+                      type="number"
+                      min="0"
+                      max={estado.pesoMaximo}
+                      step="1"
+                      value={a.peso}
+                      disabled={!editavel || !i.existe || salvando}
+                      onChange={(e) => mudar(i, 'peso', e.target.value)}
+                      style={{ width: 64, height: 26, textAlign: 'center', border: `1px solid ${pesoInvalido(a.peso) ? '#D64550' : 'var(--pbi-grid)'}`, borderRadius: 5 }}
+                      aria-label={`Peso de ${i.rotulo}`}
+                    />
+                  </td>
+                  <td className="left" style={pendente ? { background: '#FDF3D6' } : undefined}>
+                    <select
+                      className="cfg-select-inline"
+                      value={a.direcao}
+                      disabled={!editavel || !i.existe || salvando}
+                      onChange={(e) => mudar(i, 'direcao', e.target.value)}
+                      aria-label={`Direção de ${i.rotulo}`}
+                    >
+                      {DIRECOES.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
+                    </select>
+                  </td>
+                  <td className="center">{Number(a.peso) > 0 ? 'sim' : 'não'}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td className="left" colSpan={2}>{comPeso} de {estado.indicadores.length} indicadores entram na nota</td>
+              <td className="center">{soma}</td>
+              <td colSpan={2} />
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      {estado.naoUsadas?.length > 0 && (
+        <p className="cfg-nota">
+          Linhas da tabela que o painel não usa (nome diferente dos indicadores acima):{' '}
+          {estado.naoUsadas.map((n) => <code key={n} style={{ marginRight: 6 }}>{n}</code>)}
+        </p>
+      )}
+
+      <div className="cfg-medicao">
+        <h4>Histórico de alterações</h4>
+        {!estado.historico?.length ? (
+          <p className="cfg-nota">Nenhuma alteração feita por esta tela ainda.</p>
+        ) : (
+          <table className="pbi">
+            <thead>
+              <tr><th className="left">Quando</th><th className="left">Quem</th><th className="left">Indicador</th><th className="left">Antes</th><th className="left">Depois</th></tr>
+            </thead>
+            <tbody>
+              {estado.historico.map((h, n) => (
+                <tr key={`${h.em}-${h.indicador}-${n}`}>
+                  <td className="left">{dataHoraBr(h.em)}</td>
+                  <td className="left">{h.por || '—'}</td>
+                  <td className="left">{h.indicador}</td>
+                  <td className="left">peso {h.antes.peso} · {h.antes.direcao} é melhor</td>
+                  <td className="left">peso {h.depois.peso} · {h.depois.direcao} é melhor</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 const ABAS = [
   { id: 'usuarios', label: 'Usuários', icone: 'pessoas' },
   { id: 'telas', label: 'Telas', icone: 'tela' },
   { id: 'datas', label: 'Datas', icone: 'calendario' },
+  { id: 'pesos', label: 'Pesos dos quartis', icone: 'config' },
   { id: 'ia', label: 'Provedor de IA', icone: 'ia' },
 ];
 
@@ -904,7 +1106,7 @@ export default function Configuracoes() {
 
   return (
     <div className="page">
-      <Visual className="v-auto" title="Configurações" sub="Acessos, recorte de datas e provedor de IA">
+      <Visual className="v-auto" title="Configurações" sub="Acessos, recorte de datas, pesos dos quartis e provedor de IA">
         <div className="cfg-abas">
           {ABAS.map((a) => (
             <button key={a.id} type="button" className={aba === a.id ? 'on' : ''} onClick={() => setAba(a.id)}>
@@ -916,6 +1118,7 @@ export default function Configuracoes() {
         {aba === 'usuarios' && <AbaUsuarios />}
         {aba === 'telas' && <AbaTelas />}
         {aba === 'datas' && <AbaDatas />}
+        {aba === 'pesos' && <AbaPesos />}
         {aba === 'ia' && <AbaIA />}
       </Visual>
     </div>
