@@ -245,7 +245,7 @@ function MatrizQuartis({ indicadores, colaboradores: brutos }) {
 
   return (
     <div className="tbl-wrap">
-      <table className="matrix">
+      <table className="matrix compacta">
         <thead>
           <tr>
             <Cabecalho coluna="colaborador" ordem={ordem} onOrdenar={onOrdenar} className="rowhead">Colaborador</Cabecalho>
