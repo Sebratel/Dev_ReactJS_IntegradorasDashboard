@@ -36,6 +36,16 @@ const AREA_PADRAO = 'SUPORTE TÉCNICO';
  */
 const PERGUNTA_PADRAO = 'Como você se sentiu em relação ao atendimento da pessoa que falou com você?';
 
+/**
+ * Recorte operacional com que a tela abre (decisão de 17/11/2026, revê a DN-13):
+ * só o receptivo do Matrix e só as ligações recebidas do Native, como o cenário
+ * padrão do Power BI. No ativo o TME não mede espera (o agente começa a conversa e a
+ * primeira mensagem chega a ficar segundos antes do início do atendimento). Limpar o
+ * filtro volta para estes valores; para ver tudo, marque as opções todas.
+ */
+const AT_REC_PADRAO = 'Receptivo';
+const SENTIDO_PADRAO = 'Recebida';
+
 // ------------------------------------------------------------------ período (D-02)
 
 const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
@@ -281,7 +291,12 @@ export function Quartis() {
   }, []);
   // a área define quem entra no ranking; abre no Suporte Técnico (DN-02, DN-11)
   const { valores, definir, definirVarios, limpar, lista, temFiltro } = useFiltros({
-    de: ultimoMes.de, ate: ultimoMes.ate, area: AREA_PADRAO, pergunta: PERGUNTA_PADRAO,
+    de: ultimoMes.de,
+    ate: ultimoMes.ate,
+    area: AREA_PADRAO,
+    pergunta: PERGUNTA_PADRAO,
+    ativoReceptivo: AT_REC_PADRAO,
+    sentido: SENTIDO_PADRAO,
   });
 
   const periodo = { de: valores.de, ate: valores.ate };
